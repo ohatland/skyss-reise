@@ -122,6 +122,17 @@ Avgjort 13. november 2026 etter brukerens beskrivelse: 0:00 er riktig for det me
 - **Rekkefølge når motoren slår opp en gangtid:** brukerens tid for plattformparet, så Enturs tid for plattformparet, ellers 0.
 - **Nye funn for morgenen:** Bybanen fra Sandslivegen til Bergen lufthavn (17 minutter å gå til jobben), linje 53 til Ådlandsflaten (11 minutter), og linje 24 via Sandeide.
 
+## Bygg selv og endring av ruter
+
+Laget 13. november 2026.
+
+- **Bygg selv** legger til én etappe om gangen: fra-holdeplass, til-holdeplass, og så «Finn ruter» eller «Gå hit». Neste etappe starter der forrige sluttet. Appen slår opp hos Entur hvilke linjer som går direkte, og bruker holdeplassene Entur selv bruker i reiser.
+- **Et egenbygd alternativ trenger ikke nå helt frem.** Siden appen kombinerer etapper selv, er også en delstrekning nyttig. Skjermen sier fra når kjeden ikke ender på den andre enden av reisen.
+- **Starter alternativet på en holdeplass ingen vei fra jobben fører til,** henter appen gangtiden dit fra Entur og lagrer den som forbindelse.
+- **Rutene på en etappe** endres ved å trykke på dem i alternativet. «Går også her» viser linjer Entur kjenner på strekningen. En etappe må ha minst én rute.
+- **Oppslaget av direkte ruter er et vanlig søk som filtreres etterpå.** `maximumTransfers: 0` virker ikke: Entur svarer da med å gå hele veien.
+- **Birkelandsskiftet har minst tre ID-er hos Entur:** `58537` fra holdeplassøket, `30168` for bussterminalen i reiser, og `30162` i gangsvaret. Derfor brukes alltid ID-ene fra reisesvarene i lagrede etapper.
+
 ## Senere forbedring
 
 Kartleggingen bør vise hvor ofte hvert alternativ er raskest. Det lot seg ikke måle med Enturs søk alene: alternativene via Storavatnet og Møhlenpris ender på samme 400 eller 410 og kommer frem samtidig, og Entur viser bare noen av dem per søk. Tallet må regnes med appens egen motor, den samme som driver forsiden.

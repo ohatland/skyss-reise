@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -81,9 +81,19 @@ export default function AlternativeScreen() {
           </View>
           {rows.map((row, index) => (
             <View key={index} style={styles.tableRow}>
-              <Text style={[styles.body, styles.lineColumn, { color: theme.text, fontWeight: '500' }]}>
-                {row.lines.join(', ')}
-              </Text>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/etappe',
+                    params: { tripType: tripType.id, key: alternative.key, leg: String(row.legIndex) },
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`Endre ruter: ${row.lines.join(', ')}`}
+                hitSlop={6}
+                style={styles.lineColumn}>
+                <Text style={[styles.body, { color: theme.text, fontWeight: '500' }]}>{row.lines.join(', ')}</Text>
+              </Pressable>
               <Text style={[styles.body, styles.stretchColumn, { color: theme.textSecondary }]}>
                 {shortStopName(row.from.name)} → {shortStopName(row.to.name)}
               </Text>
@@ -101,8 +111,9 @@ export default function AlternativeScreen() {
           ))}
         </View>
         <Text style={[styles.label, { color: theme.textMuted, marginTop: Spacing.two }]}>
-          Gangtiden er tiden du bruker fra forrige kjøretøy til dette. Trykk på den for å sette din egen.
-          Den gjelder alle alternativer med samme bytte mellom de samme plattformene.
+          Trykk på rutene for å endre hvilke linjer som gjelder for etappen. Gangtiden er tiden du bruker
+          fra forrige kjøretøy til dette. Trykk på den for å sette din egen. Den gjelder alle alternativer
+          med samme bytte mellom de samme plattformene.
         </Text>
 
         {walks.length > 0 && (

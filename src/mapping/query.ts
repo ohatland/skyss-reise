@@ -22,6 +22,8 @@ export interface TripSearchParams {
   bannedLines?: string[];
   /** Stop place id the trip must board or alight at. */
   viaStopPlaceId?: string;
+  /** Walk the whole way instead of using public transport. */
+  onFoot?: boolean;
 }
 
 export interface TripLegResponse {
@@ -84,6 +86,7 @@ export function buildTripQuery(params: TripSearchParams): string {
   if (params.viaStopPlaceId) {
     args.push(`via: [{visit: {stopLocationIds: [${JSON.stringify(params.viaStopPlaceId)}]}}]`);
   }
+  if (params.onFoot) args.push('modes: {directMode: foot, transportModes: []}');
 
   return `{
   trip(${args.join(', ')}) {

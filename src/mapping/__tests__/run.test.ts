@@ -1,7 +1,7 @@
-import { nextWeekday, osloIso, osloOffsetMinutes, timesInWindow } from '@/core/oslo-time';
+import { nextWeekday, osloIso, osloOffsetMinutes, parseClock, timesInWindow } from '@/core/oslo-time';
 import { setLogSinks } from '@/logging/logger';
 import { buildTripQuery, type TripPatternResponse, type TripSearchParams } from '@/mapping/query';
-import { dominantLines, runMapping, totalSearches } from '@/mapping/run';
+import { dominantLines, extendWithVia, runMapping, totalSearches } from '@/mapping/run';
 import { DEFAULT_VIA_STOPS, HOME, TRIP_TYPES, WORK } from '@/model/places';
 
 beforeEach(() => setLogSinks([]));
@@ -47,6 +47,23 @@ describe('oslo time', () => {
     expect(nextWeekday(new Date('2026-11-14T23:30:00+01:00'))).toBe('2026-11-16');
   });
 
+  it.each([
+    ['6:30', '06:30'],
+    ['06:30', '06:30'],
+    ['14.05', '14:05'],
+    [' 23:59 ', '23:59'],
+  ] as const)('reads %s as a time of day', (text, clock) => {
+    expect(parseClock(text)).toBe(clock);
+  });
+
+  it.each(['', '6', '24:00', '12:60', 'halv sju', '6:3'])('rejects %s as a time of day', (text) => {
+    expect(parseClock(text)).toBeNull();
+  });
+
+  it('gives no start times when the window ends before it begins', () => {
+    expect(timesInWindow('17:00', '14:30', 20)).toEqual([]);
+  });
+
   it('lists start times through the window, end included', () => {
     expect(timesInWindow('14:30', '17:00', 20)).toEqual(['14:30', '14:50', '15:10', '15:30', '15:50', '16:10', '16:30', '16:50']);
     expect(timesInWindow('06:30', '07:30', 30)).toEqual(['06:30', '07:00', '07:30']);
@@ -64,6 +81,11 @@ describe('buildTripQuery', () => {
     expect(query).toContain('ignoreRealtimeUpdates: true');
     expect(query).not.toContain('banned');
     expect(query).not.toContain('via');
+  });
+
+  it('can ask for walking the whole way', () => {
+    expect(buildTripQuery({ ...base, onFoot: true })).toContain('modes: {directMode: foot, transportModes: []}');
+    expect(buildTripQuery(base)).not.toContain('modes:');
   });
 
   it('adds banned lines, via stop and the looser search settings when asked', () => {
@@ -155,5 +177,25 @@ describe('runMapping', () => {
   it('returns no alternatives when nothing is found', async () => {
     const result = await runMapping(config, { search: async () => [] });
     expect(result.alternatives).toEqual([]);
+  });
+
+  it('can be extended with a search through one more stop', async () => {
+    const first = await runMapping(config, {
+      search: async () => [trip(60, [leg('50E', B, M), leg('400', M, K)])],
+    });
+    const calls: TripSearchParams[] = [];
+
+    const extended = await extendWithVia(first, config, { id: 'NSR:StopPlace:58538', name: 'Sandslivegen' }, {
+      search: async (params) => {
+        calls.push(params);
+        return [trip(55, [leg('1', B, S), leg('400', S, K)])];
+      },
+    });
+
+    expect(calls).toHaveLength(config.times.length);
+    expect(calls.every((c) => c.viaStopPlaceId === 'NSR:StopPlace:58538')).toBe(true);
+    expect(extended.searches).toBe(first.searches + config.times.length);
+    expect(extended.alternatives.map((a) => a.group).sort()).toEqual(['Via Møhlenpris', 'Via Sandslivegen']);
+    expect(first.alternatives).toHaveLength(1);
   });
 });

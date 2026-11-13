@@ -23,6 +23,8 @@ export interface Walk {
 
 /** A vehicle in an alternative, and the walks that can lead to it from the previous one. */
 export interface VehicleRow {
+  /** Position of this vehicle's leg in the alternative. */
+  legIndex: number;
   lines: string[];
   from: StopRef;
   to: StopRef;
@@ -78,7 +80,7 @@ export function vehicleRows(legs: Leg[], times: WalkTimes): VehicleRow[] {
   let walked: Walk | null = null;
   const shares = (a: string[], b: string[]) => a.some((line) => b.includes(line));
 
-  for (const leg of legs) {
+  for (const [legIndex, leg] of legs.entries()) {
     if (leg.kind === 'walk') {
       walked = betweenStops(leg.from, leg.to, leg.seconds ?? null, times);
       continue;
@@ -98,7 +100,7 @@ export function vehicleRows(legs: Leg[], times: WalkTimes): VehicleRow[] {
       if (walks.length === 0) walks = [betweenStops(from, leg.from, null, times)];
     }
 
-    rows.push({ lines: leg.lines, from: leg.from, to: leg.to, walks });
+    rows.push({ legIndex, lines: leg.lines, from: leg.from, to: leg.to, walks });
     arrivedAt = leg.to;
     arrivedOn = leg.lines;
     walked = null;

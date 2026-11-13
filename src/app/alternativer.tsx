@@ -77,12 +77,20 @@ export default function AlternativesScreen() {
           </Text>
         )}
 
-        <Pressable
-          onPress={() => router.push('/kartlegging')}
-          accessibilityRole="button"
-          style={[styles.button, { borderColor: theme.border }]}>
-          <Text style={[styles.body, { color: theme.text }]}>Kartlegg</Text>
-        </Pressable>
+        <View style={styles.buttons}>
+          <Pressable
+            onPress={() => router.push('/kartlegging')}
+            accessibilityRole="button"
+            style={[styles.button, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>Kartlegg</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push({ pathname: '/bygg', params: { tripType: tripTypeId } })}
+            accessibilityRole="button"
+            style={[styles.button, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>Bygg selv</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -104,11 +112,12 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   chain: { fontSize: 15, fontWeight: '500' },
   chevron: { fontSize: 20 },
+  buttons: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.four },
   button: {
+    flex: 1,
     borderWidth: 1,
     borderRadius: Radius.control,
     paddingVertical: Spacing.two,
     alignItems: 'center',
-    marginTop: Spacing.four,
   },
 });

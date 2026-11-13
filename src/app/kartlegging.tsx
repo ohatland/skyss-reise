@@ -1,20 +1,36 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { leave, ScreenHeader } from '@/components/screen-header';
+import { StopSearch } from '@/components/stop-search';
 import { TripTypeSwitch } from '@/components/trip-type-switch';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
-import { nextWeekday, timesInWindow } from '@/core/oslo-time';
+import { nextWeekday, parseClock, timesInWindow } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
 import { log } from '@/logging/logger';
 import { describeChain, describeConnections, describeStats, describeStops } from '@/mapping/describe';
 import { connectionsFor, groupAlternatives } from '@/mapping/pattern';
 import { searchTrips } from '@/mapping/query';
-import { runMapping, totalSearches, type MappingResult } from '@/mapping/run';
-import { DEFAULT_VIA_STOPS, TRIP_TYPES } from '@/model/places';
-import { placeSide, type Alternative, type Connection, type MappedAlternative, type PlaceSide, type TripTypeId } from '@/model/types';
+import { extendWithVia, runMapping, totalSearches, type MappingResult } from '@/mapping/run';
+import { TRIP_TYPES } from '@/model/places';
+import {
+  placeSide,
+  type Alternative,
+  type Connection,
+  type MappedAlternative,
+  type PlaceSide,
+  type StopRef,
+  type TripTypeId,
+} from '@/model/types';
 import { loadRoutes, NO_ROUTES, saveMapping, type SavedRoutes } from '@/storage/alternatives';
+import {
+  defaultSettings,
+  loadMappingSettings,
+  saveMappingSettings,
+  type MappingSettings,
+} from '@/storage/mapping-settings';
 
 /** Minutes between the start times a mapping run searches. */
 const SEARCH_STEP_MINUTES = 20;
@@ -28,28 +44,47 @@ type Phase =
 export default function MappingScreen() {
   const theme = useTheme();
   const [tripTypeId, setTripTypeId] = useState<TripTypeId>('fromWork');
+  const [settings, setSettings] = useState<MappingSettings>(defaultSettings('fromWork'));
   const [phase, setPhase] = useState<Phase>({ name: 'setup' });
   const [saved, setSaved] = useState<SavedRoutes>(NO_ROUTES);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showRare, setShowRare] = useState(false);
+  const [addingVia, setAddingVia] = useState(false);
 
   const tripType = TRIP_TYPES[tripTypeId];
   const times = useMemo(
-    () => timesInWindow(tripType.window.start, tripType.window.end, SEARCH_STEP_MINUTES),
-    [tripType],
+    () => timesInWindow(settings.start, settings.end, SEARCH_STEP_MINUTES),
+    [settings.start, settings.end],
   );
 
   useEffect(() => {
     loadRoutes().then(setSaved);
   }, []);
 
+  useEffect(() => {
+    setSettings(defaultSettings(tripTypeId));
+    loadMappingSettings(tripTypeId).then(setSettings);
+  }, [tripTypeId]);
+
+  const changeSettings = useCallback(
+    (next: MappingSettings) => {
+      setSettings(next);
+      void saveMappingSettings(tripTypeId, next);
+    },
+    [tripTypeId],
+  );
+
   const savedKeys = useMemo(
     () => new Set(saved.alternatives.filter((a) => a.tripType === tripTypeId).map((a) => a.key)),
     [saved, tripTypeId],
   );
 
+  const config = useMemo(
+    () => ({ tripType, date: nextWeekday(new Date()), times, viaStops: settings.viaStops }),
+    [tripType, times, settings.viaStops],
+  );
+
   const start = useCallback(async () => {
-    const config = { tripType, date: nextWeekday(new Date()), times, viaStops: DEFAULT_VIA_STOPS };
     setPhase({ name: 'running', done: 0, total: totalSearches(config) });
     try {
       const result = await runMapping(config, {
@@ -63,9 +98,7 @@ export default function MappingScreen() {
       const hadSaved = savedKeys.size > 0;
       setSelected(
         new Set(
-          result.alternatives
-            .filter((a) => (hadSaved ? savedKeys.has(a.key) : !a.rare))
-            .map((a) => a.key),
+          result.alternatives.filter((a) => (hadSaved ? savedKeys.has(a.key) : !a.rare)).map((a) => a.key),
         ),
       );
       setShowRare(false);
@@ -74,7 +107,29 @@ export default function MappingScreen() {
       log.error(error, { where: 'mapping' });
       setPhase({ name: 'failed' });
     }
-  }, [tripType, times, savedKeys]);
+  }, [config, savedKeys]);
+
+  /** Searches once more through one stop, adds what it finds, and remembers the stop for next time. */
+  const searchVia = useCallback(
+    async (previous: MappingResult, stop: StopRef) => {
+      setPhase({ name: 'running', done: 0, total: times.length });
+      const result = await extendWithVia(previous, config, stop, {
+        search: searchTrips,
+        onProgress: (done, total) => setPhase({ name: 'running', done, total }),
+      });
+      const before = new Set(previous.alternatives.map((a) => a.key));
+      setSelected((current) => {
+        const next = new Set(current);
+        for (const a of result.alternatives) if (!before.has(a.key) && !a.rare) next.add(a.key);
+        return next;
+      });
+      if (!settings.viaStops.some((s) => s.id === stop.id)) {
+        changeSettings({ ...settings, viaStops: [...settings.viaStops, { id: stop.id, name: stop.name }] });
+      }
+      setPhase({ name: 'results', result });
+    },
+    [config, times.length, settings, changeSettings],
+  );
 
   const toggle = useCallback((key: string) => {
     setSelected((current) => {
@@ -85,25 +140,24 @@ export default function MappingScreen() {
     });
   }, []);
 
-  const save = useCallback(async ({ alternatives: found, transferWalks }: MappingResult) => {
-    // Alternatives saved earlier that this run did not find are kept, with their connections.
-    const foundKeys = new Set(found.map((a) => a.key));
-    const keptAlternatives: Alternative[] = saved.alternatives.filter(
-      (a) => a.tripType === tripTypeId && !foundKeys.has(a.key),
-    );
-    const chosen = found.filter((a) => selected.has(a.key));
-    const connections = new Map<string, Connection>();
-    for (const c of saved.connections) if (c.tripType === tripTypeId) connections.set(c.key, c);
-    for (const c of connectionsFor(chosen)) connections.set(c.key, c);
-    await saveMapping(tripTypeId, [...keptAlternatives, ...chosen], [...connections.values()], transferWalks);
-    leave();
-  }, [saved, selected, tripTypeId]);
+  const save = useCallback(
+    async ({ alternatives: found, transferWalks }: MappingResult) => {
+      // Alternatives saved earlier that this run did not find are kept, with their connections.
+      const foundKeys = new Set(found.map((a) => a.key));
+      const keptAlternatives: Alternative[] = saved.alternatives.filter(
+        (a) => a.tripType === tripTypeId && !foundKeys.has(a.key),
+      );
+      const chosen = found.filter((a) => selected.has(a.key));
+      const connections = new Map<string, Connection>();
+      for (const c of saved.connections) if (c.tripType === tripTypeId) connections.set(c.key, c);
+      for (const c of connectionsFor(chosen)) connections.set(c.key, c);
+      await saveMapping(tripTypeId, [...keptAlternatives, ...chosen], [...connections.values()], transferWalks);
+      leave();
+    },
+    [saved, selected, tripTypeId],
+  );
 
-  const colors = {
-    text: { color: theme.text },
-    secondary: { color: theme.textSecondary },
-    muted: { color: theme.textMuted },
-  };
+  const secondary = { color: theme.textSecondary };
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -116,43 +170,92 @@ export default function MappingScreen() {
       />
 
       {phase.name === 'setup' && (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <TripTypeSwitch value={tripTypeId} onChange={setTripTypeId} />
 
           <Field label="Fra" value={tripType.from.name} />
           <Field label="Til" value={tripType.to.name} />
-          <Field label="Tidsrom" value={`Hverdager ${tripType.window.start}–${tripType.window.end}`} />
+
           <View style={[styles.field, { borderBottomColor: theme.borderSoft }]}>
-            <Text style={[styles.body, colors.secondary]}>Søk også via</Text>
-            <View style={styles.chips}>
-              {DEFAULT_VIA_STOPS.map((stop) => (
-                <Text key={stop.id} style={[styles.chip, colors.text, { borderColor: theme.border }]}>
-                  {stop.name}
-                </Text>
-              ))}
+            <Text style={[styles.body, secondary]}>Tidsrom, hverdager</Text>
+            <View style={styles.window}>
+              <ClockField
+                label="Fra klokken"
+                value={settings.start}
+                onChange={(start) => changeSettings({ ...settings, start })}
+              />
+              <Text style={[styles.body, secondary]}>–</Text>
+              <ClockField
+                label="Til klokken"
+                value={settings.end}
+                onChange={(end) => changeSettings({ ...settings, end })}
+              />
             </View>
           </View>
+          {times.length === 0 && (
+            <Text style={[styles.label, { color: theme.marginMissed }]}>
+              Tidsrommet må slutte etter at det begynner.
+            </Text>
+          )}
 
-          <Text style={[styles.body, colors.secondary, { marginTop: Spacing.three }]}>
+          <View style={[styles.field, { borderBottomColor: theme.borderSoft }]}>
+            <Text style={[styles.body, secondary]}>Søk også via</Text>
+            <View style={styles.chips}>
+              {settings.viaStops.map((stop) => (
+                <Pressable
+                  key={stop.id}
+                  onPress={() =>
+                    changeSettings({ ...settings, viaStops: settings.viaStops.filter((s) => s.id !== stop.id) })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Fjern ${stop.name}`}
+                  style={[styles.chip, { borderColor: theme.border }]}>
+                  <Text style={[styles.body, { color: theme.text }]}>{stop.name} ×</Text>
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={() => setAddingVia((open) => !open)}
+                accessibilityRole="button"
+                style={[styles.chip, { borderColor: theme.border }]}>
+                <Text style={[styles.body, { color: theme.text }]}>+ Holdeplass</Text>
+              </Pressable>
+            </View>
+          </View>
+          {addingVia && (
+            <StopSearch
+              placeholder="Søk etter holdeplass"
+              autoFocus
+              onSelect={(stop) => {
+                if (!settings.viaStops.some((s) => s.id === stop.id)) {
+                  changeSettings({ ...settings, viaStops: [...settings.viaStops, { id: stop.id, name: stop.name }] });
+                }
+                setAddingVia(false);
+              }}
+            />
+          )}
+
+          <Text style={[styles.body, secondary, { marginTop: Spacing.three }]}>
             Appen søker gjennom hele tidsrommet på flere måter: vanlig søk, med flere bytter, med mer gange,
-            og på nytt uten de linjene som går igjen i forslagene. Bare det periodebilletten dekker er med: Skyss og tog.
+            og på nytt uten de linjene som går igjen i forslagene. Bare det periodebilletten dekker er med:
+            Skyss og tog.
           </Text>
 
           <Pressable
             onPress={start}
+            disabled={times.length === 0}
             accessibilityRole="button"
-            style={[styles.primary, { backgroundColor: theme.text }]}>
+            style={[styles.primary, { backgroundColor: times.length ? theme.text : theme.textMuted }]}>
             <Text style={[styles.primaryText, { color: theme.background }]}>Start kartlegging</Text>
           </Pressable>
-          <Text style={[styles.label, colors.muted, styles.center]}>
-            {totalSearches({ times, viaStops: DEFAULT_VIA_STOPS })} søk hos Entur. Tar omtrent ett minutt.
+          <Text style={[styles.label, styles.center, { color: theme.textMuted }]}>
+            {totalSearches({ times, viaStops: settings.viaStops })} søk hos Entur. Tar omtrent ett minutt.
           </Text>
         </ScrollView>
       )}
 
       {phase.name === 'running' && (
         <View style={styles.content}>
-          <Text style={[styles.body, colors.secondary]}>
+          <Text style={[styles.body, secondary]}>
             Søker hos Entur … {phase.done} av {phase.total}
           </Text>
           <View style={[styles.track, { backgroundColor: theme.borderSoft }]}>
@@ -170,12 +273,12 @@ export default function MappingScreen() {
 
       {phase.name === 'failed' && (
         <View style={styles.content}>
-          <Text style={[styles.body, colors.secondary]}>Fikk ikke kontakt med Entur. Ingen søk ga svar.</Text>
+          <Text style={[styles.body, secondary]}>Fikk ikke kontakt med Entur. Ingen søk ga svar.</Text>
           <Pressable
             onPress={() => setPhase({ name: 'setup' })}
             accessibilityRole="button"
             style={[styles.secondaryButton, { borderColor: theme.border }]}>
-            <Text style={[styles.body, colors.text]}>Prøv igjen</Text>
+            <Text style={[styles.body, { color: theme.text }]}>Prøv igjen</Text>
           </Pressable>
         </View>
       )}
@@ -191,6 +294,8 @@ export default function MappingScreen() {
           showRare={showRare}
           onToggle={toggle}
           onShowRare={() => setShowRare(true)}
+          onSearchVia={(stop) => searchVia(phase.result, stop)}
+          onBuild={() => router.push({ pathname: '/bygg', params: { tripType: tripTypeId } })}
           onSave={() => save(phase.result)}
         />
       )}
@@ -208,6 +313,36 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+interface ClockFieldProps {
+  label: string;
+  value: string;
+  onChange: (clock: string) => void;
+}
+
+/** A time of day. Text that is not a time is marked and left unsaved. */
+function ClockField({ label, value, onChange }: ClockFieldProps) {
+  const theme = useTheme();
+  const [draft, setDraft] = useState(value);
+  const invalid = parseClock(draft) === null;
+
+  useEffect(() => setDraft(value), [value]);
+
+  return (
+    <TextInput
+      value={draft}
+      onChangeText={(text) => {
+        setDraft(text);
+        const clock = parseClock(text);
+        if (clock && text.trim().length >= 4) onChange(clock);
+      }}
+      onBlur={() => setDraft(parseClock(draft) ?? value)}
+      keyboardType="numbers-and-punctuation"
+      accessibilityLabel={label}
+      style={[styles.clock, { color: theme.text, borderColor: invalid ? theme.marginMissed : theme.border }]}
+    />
+  );
+}
+
 interface ResultsProps {
   result: MappingResult;
   tripTypeLabel: string;
@@ -218,6 +353,8 @@ interface ResultsProps {
   showRare: boolean;
   onToggle: (key: string) => void;
   onShowRare: () => void;
+  onSearchVia: (stop: StopRef) => void;
+  onBuild: () => void;
   onSave: () => void;
 }
 
@@ -231,9 +368,12 @@ function Results({
   showRare,
   onToggle,
   onShowRare,
+  onSearchVia,
+  onBuild,
   onSave,
 }: ResultsProps) {
   const theme = useTheme();
+  const [searchingVia, setSearchingVia] = useState(false);
   const common = result.alternatives.filter((a) => !a.rare);
   const rare = result.alternatives.filter((a) => a.rare);
   const groups = groupAlternatives(common);
@@ -281,7 +421,7 @@ function Results({
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[styles.label, { color: theme.textMuted }]}>
           {tripTypeLabel} · gruppert etter siste bytte
         </Text>
@@ -299,8 +439,7 @@ function Results({
 
         {groups.map((group) => (
           <View key={group.name}>
-            <Text
-              style={[styles.group, { color: theme.text, backgroundColor: theme.cardHighlight }]}>
+            <Text style={[styles.group, { color: theme.text, backgroundColor: theme.cardHighlight }]}>
               {group.name}
             </Text>
             {group.alternatives.map(row)}
@@ -316,20 +455,47 @@ function Results({
         )}
         {rare.length > 0 && showRare && (
           <View>
-            <Text
-              style={[styles.group, { color: theme.text, backgroundColor: theme.cardHighlight }]}>
+            <Text style={[styles.group, { color: theme.text, backgroundColor: theme.cardHighlight }]}>
               Sjeldnere forslag
             </Text>
             {rare.map(row)}
           </View>
         )}
+
+        <View style={styles.more}>
+          <Pressable
+            onPress={() => setSearchingVia((open) => !open)}
+            accessibilityRole="button"
+            style={[styles.secondaryButton, styles.half, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>Søk via holdeplass</Text>
+          </Pressable>
+          <Pressable
+            onPress={onBuild}
+            accessibilityRole="button"
+            style={[styles.secondaryButton, styles.half, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>Bygg selv</Text>
+          </Pressable>
+        </View>
+        {searchingVia && (
+          <View style={{ marginTop: Spacing.two }}>
+            <StopSearch
+              placeholder="Holdeplass reisen skal gå innom"
+              autoFocus
+              onSelect={(stop) => {
+                setSearchingVia(false);
+                onSearchVia(stop);
+              }}
+            />
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.borderSoft, backgroundColor: theme.background }]}>
-        <Pressable onPress={onSave} accessibilityRole="button" style={[styles.primary, { backgroundColor: theme.text, marginTop: 0 }]}>
-          <Text style={[styles.primaryText, { color: theme.background }]}>
-            Lagre {selected.size} valgte
-          </Text>
+        <Pressable
+          onPress={onSave}
+          accessibilityRole="button"
+          style={[styles.primary, { backgroundColor: theme.text, marginTop: 0 }]}>
+          <Text style={[styles.primaryText, { color: theme.background }]}>Lagre {selected.size} valgte</Text>
         </Pressable>
       </View>
     </>
@@ -346,14 +512,24 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: 9,
     borderBottomWidth: 1,
   },
+  window: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  clock: {
+    fontSize: FontSize.body,
+    fontVariant: ['tabular-nums'],
+    borderWidth: 1,
+    borderRadius: Radius.control,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    width: 58,
+    textAlign: 'center',
+  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: Spacing.one, flex: 1 },
   chip: {
-    fontSize: FontSize.body,
     borderWidth: 1,
     borderRadius: Radius.control,
     paddingHorizontal: Spacing.two,
@@ -374,6 +550,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: Spacing.three,
   },
+  half: { flex: 1 },
+  more: { flexDirection: 'row', gap: Spacing.two },
   track: { height: 4, borderRadius: 2, marginTop: Spacing.two, overflow: 'hidden' },
   group: {
     fontSize: 12,

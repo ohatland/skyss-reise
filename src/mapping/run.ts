@@ -25,6 +25,8 @@ export interface MappingResult {
   alternatives: MappedAlternative[];
   /** Entur's walking time at each transfer seen in the run. */
   transferWalks: TransferWalk[];
+  /** Everything Entur suggested, kept so that a later search can add to it. */
+  patterns: TripPattern[];
   searches: number;
   failedSearches: number;
   /** Lines the run chose to search without, as line ids. */
@@ -132,8 +134,55 @@ export async function runMapping(config: MappingConfig, deps: MappingDeps): Prom
   return {
     alternatives,
     transferWalks: mergeTransferWalks(patterns),
+    patterns,
     searches: total,
     failedSearches: failed,
     bannedLines: banned,
+  };
+}
+
+/**
+ * Searches the window once more through one stop and adds what it finds to an
+ * earlier result. For routes the run missed, such as one the traveller knows of.
+ */
+export async function extendWithVia(
+  previous: MappingResult,
+  config: MappingConfig,
+  viaStop: StopRef,
+  deps: MappingDeps,
+): Promise<MappingResult> {
+  const { tripType, date, times } = config;
+  const patterns = [...previous.patterns];
+  let done = 0;
+  let failed = 0;
+
+  const tasks = times.map((time) => async () => {
+    try {
+      const trips = await deps.search({
+        from: tripType.from,
+        to: tripType.to,
+        dateTime: osloIso(date, time),
+        viaStopPlaceId: viaStop.id,
+      });
+      for (const trip of trips) {
+        const pattern = toPattern(trip, tripType.from, tripType.to);
+        if (pattern) patterns.push(pattern);
+      }
+    } catch {
+      failed++;
+    }
+    done++;
+    deps.onProgress?.(done, times.length);
+  });
+  await inParallel(tasks, deps.concurrency ?? 3);
+
+  log.event('mapping_via', { tripType: tripType.id, searches: times.length, failed });
+  return {
+    ...previous,
+    alternatives: patterns.length ? mergePatterns(patterns, tripType) : [],
+    transferWalks: mergeTransferWalks(patterns),
+    patterns,
+    searches: previous.searches + times.length,
+    failedSearches: previous.failedSearches + failed,
   };
 }

@@ -147,7 +147,9 @@ Status 13. november 2026:
 - Gjort senere samme dag: listen over lagrede alternativer (`src/app/alternativer.tsx`), redigering av ett alternativ med egen gangtid per bytte (`src/app/alternativ.tsx`), og sletting. Kartleggingen tar vare på Enturs gangtid på hvert bytte. En kartlegging for Til jobb er kjørt i nettleser og ga 34 alternativer.
 - Avgjort samme dag: appen kombinerer selv etapper på tvers av de lagrede alternativene. De lagrede alternativene utgjør et nett (`src/model/network.ts`), og motoren i fase 4 finner veiene gjennom det. En kombinasjon trenger derfor ikke være lagret som eget alternativ.
 - Avgjort samme dag: gangtid ved bytte gjelder per par av plattformer, ikke per holdeplass. Se `docs/design/alternativer.md`.
-- Gjenstår: redigere tidsrom og via-holdeplasser i oppsettet, «Søk via holdeplass», «Bygg selv», og å endre ruter og holdeplasser på en etappe.
+- Gjort senere samme dag: tidsrom og via-holdeplasser kan endres i oppsettet og huskes per reisetype, «Søk via holdeplass» utvider et resultat med ett søk til, «Bygg selv» lager et alternativ etappe for etappe (`src/app/bygg.tsx`), og rutene på en etappe kan endres med forslag fra Entur (`src/app/etappe.tsx`). Alt er prøvd i nettleser mot Entur.
+- Funksjonene i fase 3 er dermed på plass. Fasen er ikke ferdig etter sitt eget mål før brukeren har kjørt kartleggingen på telefonen og lagret sine alternativer, og det venter på bygget til iPhone i fase 2.
+- Ikke laget: å endre holdeplassene på en etappe (bygg et nytt alternativ i stedet), og å slette en enkelt etappe.
 - Avgjort: reiser som bare skiller seg i veien mellom jobben og første eller siste holdeplass, slås sammen til ett alternativ. Veiene lagres for seg per holdeplass, og appen velger selv. Det tok listen fra 37 til 21 alternativer. Se `docs/design/alternativer.md`.
 
 ### Fase 4: Før avreise

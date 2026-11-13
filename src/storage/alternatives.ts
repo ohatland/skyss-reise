@@ -72,6 +72,40 @@ export async function saveMapping(
   });
 }
 
+/** Adds one alternative, such as one built by hand, with any connections it needs. */
+export async function addAlternative(alternative: Alternative, connections: Connection[] = []): Promise<SavedRoutes> {
+  const current = await loadRoutes();
+  const known = new Set(current.connections.map((c) => c.key));
+  log.event('alternative_added', { tripType: alternative.tripType, legs: alternative.legs.length });
+  return store({
+    ...current,
+    alternatives: [
+      ...current.alternatives.filter((a) => !(a.tripType === alternative.tripType && a.key === alternative.key)),
+      toAlternative(alternative),
+    ],
+    connections: [...current.connections, ...connections.filter((c) => !known.has(c.key))],
+  });
+}
+
+/** Replaces the lines of one leg of a saved alternative. */
+export async function setLegLines(
+  tripType: TripTypeId,
+  key: string,
+  legIndex: number,
+  lines: string[],
+): Promise<SavedRoutes> {
+  const current = await loadRoutes();
+  log.event('leg_lines_set', { tripType, lines: lines.length });
+  return store({
+    ...current,
+    alternatives: current.alternatives.map((a) =>
+      a.tripType === tripType && a.key === key
+        ? { ...a, legs: a.legs.map((leg, i) => (i === legIndex && leg.kind === 'transit' ? { ...leg, lines } : leg)) }
+        : a,
+    ),
+  });
+}
+
 export async function removeAlternative(tripType: TripTypeId, key: string): Promise<SavedRoutes> {
   const current = await loadRoutes();
   log.event('alternative_removed', { tripType });

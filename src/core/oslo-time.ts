@@ -78,3 +78,13 @@ export function timesInWindow(start: string, end: string, stepMinutes: number): 
   }
   return times;
 }
+
+/** "6:30" and "06:30" become "06:30". Null when the text is not a time of day. */
+export function parseClock(text: string): string | null {
+  const match = /^\s*(\d{1,2})[:.](\d{2})\s*$/.exec(text);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${pad(hour)}:${match[2]}`;
+}
