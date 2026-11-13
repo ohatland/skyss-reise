@@ -13,7 +13,8 @@ En app for iPhone og Android som gjør pendlingen mellom Krokåsskiftet og Birke
 - To reisetyper: Til jobb og Fra jobb, hver med faste start- og målholdeplasser.
 - Jobben ligger i Lønningsflaten 22. Grana er nærmeste holdeplass, men det går sjelden buss derfra, så brukeren må ofte gå til eller fra Birkelandsskiftet. Det er grunnen til at reisetypene har to holdeplasser i jobbenden. Gangen mellom jobben og holdeplassen er dermed en del av reisen.
 - Reisen regnes fra dør til dør (avgjort 13. november 2026): Til jobb viser når brukeren er fremme på jobben, Fra jobb viser når brukeren må gå fra jobben. Hvert sted har holdeplasser med gangtid.
-- Bare Skyss-linjer brukes. Flybussen er ikke med i periodebilletten.
+- Periodebilletten gjelder buss, bybane, båt og tog innenfor sonen. Appen søker derfor bare hos Skyss og Vy tog. Flybussen er privat, dekkes ikke, og skal aldri vises. Sonegrensen kontrolleres ikke.
+- Hva appen er til for, med brukerens ord 13. november 2026: som busspassasjer bryr brukeren seg om hvor og når bussen går. Appen skal forenkle reisekombinasjonene, slik at brukeren slipper å sammenligne mange alternativer selv og får enkel oversikt ved å se på appen.
 - Hver reisetype har lagrede alternativer: kjeder av etapper. En etappe har fra-holdeplass, til-holdeplass og én eller flere ruter, eller er gange.
 - Alternativene finnes i en kartleggingsøkt: appen søker hos Entur på flere måter gjennom et tidsrom, slår sammen funnene, og brukeren huker av dem som skal lagres. De kan også bygges manuelt etappe for etappe. Etter lagring skal brukeren ikke trenge å forholde seg til dem igjen.
 - Buss, bybane og båt. Askøybåten (linje 490, Kleppestø–Strandkaien) bygges manuelt fordi Entur ofte utelater den fra reiseforslag.
@@ -139,6 +140,12 @@ Status 13. november 2026:
 - Gangtid per bytte og plattformvisning.
 
 Ferdig når de faktiske alternativene for Til jobb og Fra jobb er lagret i appen.
+
+Status 13. november 2026:
+
+- Gjort: datamodell (`src/model`), kartleggingsmotor med tester (`src/mapping`), lagring (`src/storage`) og kartleggingsskjermen (`src/app/kartlegging.tsx`). En ekte kartlegging for Fra jobb er kjørt i nettleser: 56 søk ga 37 alternativer fra jobbadressen, og avkrysning og lagring virker.
+- Gjenstår: redigere tidsrom og via-holdeplasser i oppsettet, «Søk via holdeplass», «Bygg selv», skjermene for å justere lagrede alternativer, egen gangtid per byttested, og en kartlegging for Til jobb.
+- Avgjort: reiser som bare skiller seg i veien mellom jobben og første eller siste holdeplass, slås sammen til ett alternativ. Veiene lagres for seg per holdeplass, og appen velger selv. Det tok listen fra 37 til 21 alternativer. Se `docs/design/alternativer.md`.
 
 ### Fase 4: Før avreise
 

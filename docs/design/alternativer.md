@@ -39,12 +39,14 @@ Tegnet før kartleggingen kom til, og godkjent som tegnet etterpå. Skjermene br
 ## Fra dør til dør (avgjort 13. november 2026)
 
 - **Kartleggingen søker fra og til jobbadressen,** ikke fra en holdeplass. Entur tar da selv med gangen og velger holdeplass. Et slikt søk fant Blomsterdalen (linje 51 og 53, 10 minutter fra jobben), som brukeren ikke hadde nevnt.
-- **Bare Skyss-linjer.** Søkene bruker `whiteListed: { authorities: ["SKY:Authority:SKY"] }`. Flybussen (NOR-WAY Bussekspress) er ikke med i periodebilletten og skal aldri foreslås. Det er testet at dette fjerner FB50 fra forslagene.
+- **Bare det periodebilletten dekker.** Billetten gjelder buss, bybane, båt og tog innenfor sonen. Søkene bruker `whiteListed: { authorities: ["SKY:Authority:SKY", "VYG:Authority:VYT"] }`, altså Skyss og Vy tog. Flybussen (NOR-WAY Bussekspress) er privat og skal aldri foreslås. Det er testet at dette fjerner FB50 fra forslagene. Sonegrensen kontrolleres ikke.
 - Prøvekartleggingen under ble gjort fra Birkelandsskiftet, før dette ble avgjort, og må kjøres på nytt fra adressen.
 
 ## Datamodell som følger av dette
 
-- En reisetype går mellom to steder, hjem og jobb. Hvert sted har holdeplassene brukeren bruker, med gangtid til hver.
+- En reisetype går mellom to steder, hjem og jobb.
+- Et alternativ er kjeden mellom en holdeplass nær adressen og den andre enden av reisen.
+- En forbindelse er en vei mellom adressen og en slik holdeplass: bare gange, eller en kort tur med for eksempel 57. Forbindelsene lagres per holdeplass og gjelder alle alternativer derfra.
 
 - Et alternativ er en rekke etapper.
 - En etappe har en fra-holdeplass, en til-holdeplass og én eller flere ruter. Brukeren bekreftet 13. november at en etappe kan ha flere ruter.
@@ -89,6 +91,18 @@ Mønstre slås sammen når de har samme rekke av holdeplasser og bare linjen er 
 | Med båt | 1 → Byparken → gå → 490 → Kleppestø → 400 | 82–117 min | Ja |
 
 Forbehold: én mandag ettermiddag, rutetid uten sanntid, og bare fra Birkelandsskiftet, ikke Grana.
+
+## Første kartlegging i appen, fra jobbadressen
+
+Kjørt 13. november 2026 for Fra jobb, mandag 16. november kl. 14:30–16:50, med 56 søk. Resultat: 37 alternativer, 65–104 minutter dør til dør.
+
+- **For mange å vurdere.** Mange var samme reise med ulik vei fra jobben til første holdeplass: gå til Birkelandsskiftet, 57 fra Grana, eller 53 eller 56 fra Blomsterdalen. «50E → 400, 410 via Møhlenpris» fantes i tre utgaver.
+- **Avgjort samme dag: de slås sammen.** Hvert alternativ står én gang og begynner på en holdeplass nær jobben. Veiene dit vises som en liten linje under («Fra jobb: gå 20 min · 53 fra Blomsterdalen · 57 fra Grana») og lagres for seg per holdeplass. Appen velger selv veien når brukeren skal reise. Etter sammenslåing: 21 alternativer.
+- **Slik deles en reise:** holdeplassene brukeren kan gå rett til fra adressen, er ankere. Fra jobb kuttes reisen ved det siste kjøretøyet som tas fra et anker; til jobb ved det første som ender på et anker. Det før eller etter kuttet er veien til eller fra adressen.
+- **Nye funn:** linje 53 og 56 fra Blomsterdalen til Birkelandsskiftet, linje 23 fra Bergen lufthavn, og båtlinjene 2075 og 2080 fra Flesland kai til Strandkaiterminalen. Periodebilletten gjelder på båt innenfor sonen, så de er med.
+- **Sjeldne forslag** er de med flere enn tre bytter, eller som er mer enn halvannen gang så trege som det raskeste. Båt regnes aldri som sjelden bare fordi den er treg. Grensene er et forslag.
+- **Forhåndsvalg:** første gang er alle som ikke er sjeldne, krysset av. Senere kartlegginger krysser av dem som allerede er lagret.
+- **Birkelandsskiftet har to ID-er hos Entur:** `NSR:StopPlace:58537` fra adressesøket og `NSR:StopPlace:30168` i reiseforslagene. Kode som sammenligner holdeplasser, må ta høyde for det.
 
 ## Senere forbedring
 

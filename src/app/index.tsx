@@ -1,3 +1,5 @@
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +10,7 @@ import { formatClock } from '@/core/time';
 import type { Departure } from '@/entur/departures';
 import { useDepartures } from '@/hooks/use-departures';
 import { useTheme } from '@/hooks/use-theme';
+import { loadRoutes } from '@/storage/alternatives';
 
 /**
  * Phase 2 screen: a live departure board for Krokåsskiftet, to prove the path
@@ -16,6 +19,13 @@ import { useTheme } from '@/hooks/use-theme';
 export default function DepartureBoardScreen() {
   const theme = useTheme();
   const { board, loading, failed, refresh } = useDepartures(STOPS.krokasskiftet);
+  const [savedCount, setSavedCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadRoutes().then((routes) => setSavedCount(routes.alternatives.length));
+    }, []),
+  );
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -44,12 +54,29 @@ export default function DepartureBoardScreen() {
 
       {board && (
         <FlatList
+          style={styles.list}
           data={board.departures}
           keyExtractor={(d) => `${d.serviceJourneyId}-${d.aimedTime}`}
           renderItem={({ item }) => <DepartureRow departure={item} />}
           ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: theme.borderSoft }} />}
         />
       )}
+
+      <View style={[styles.footer, { borderTopColor: theme.borderSoft }]}>
+        <Text style={{ color: theme.textSecondary, fontSize: FontSize.body }}>
+          {savedCount === 0
+            ? 'Ingen lagrede alternativer'
+            : savedCount === 1
+              ? '1 lagret alternativ'
+              : `${savedCount} lagrede alternativer`}
+        </Text>
+        <Pressable
+          onPress={() => router.push('/kartlegging')}
+          accessibilityRole="button"
+          style={[styles.button, { borderColor: theme.border }]}>
+          <Text style={{ color: theme.text, fontSize: FontSize.body }}>Kartlegg alternativer</Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -140,5 +167,22 @@ const styles = StyleSheet.create({
   destination: {
     flex: 1,
     fontSize: FontSize.body,
+  },
+  list: {
+    flex: 1,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.three,
+    borderTopWidth: 1,
+  },
+  button: {
+    borderWidth: 1,
+    borderRadius: Radius.control,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
   },
 });
