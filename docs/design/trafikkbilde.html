@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trafikkbilde – godkjent skisse</title>
+<style>
+:root{
+  --page:#f1efe8; --phone:#ffffff; --soft:#f7f6f2;
+  --text:#1f1f1e; --text-2:#5f5e5a; --text-3:#888780;
+  --line:#d3d1c7; --line-soft:#e6e4dc;
+  --good:#15803d; --tight:#a16207; --missed:#dc2626; --m-weight:600;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --page:#1c1c1a; --phone:#262624; --soft:#30302d;
+    --text:#f1efe8; --text-2:#b4b2a9; --text-3:#888780;
+    --line:#4a4a46; --line-soft:#3a3a37;
+    --good:#97c459; --tight:#ef9f27; --missed:#f09595; --m-weight:500;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 16px;background:var(--page);color:var(--text-2);font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1{font-size:18px;font-weight:500;color:var(--text);text-align:center;margin:0 0 4px}
+.note{text-align:center;margin:0 0 20px}
+.wrap{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;align-items:flex-start}
+.cap{font-size:12px;text-align:center;margin:0 0 8px}
+.ph{width:320px;background:var(--phone);border:1px solid var(--line);border-radius:28px;padding:16px 12px}
+.ph p,.pn p{margin:0}
+.pn{width:320px}
+.n{font-variant-numeric:tabular-nums}
+.ic{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.top{display:flex;gap:8px;align-items:center}
+.seg{flex:1;display:flex;background:var(--soft);border-radius:10px;padding:3px}
+.seg span{flex:1;text-align:center;padding:5px 0;border-radius:8px;font-size:14px}
+.seg .on{background:var(--phone);border:1px solid var(--line);color:var(--text);font-weight:500}
+.hd{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:500;color:var(--text);padding:0 2px 2px}
+.q{display:flex;align-items:center;gap:8px;background:var(--phone);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-top:8px}
+.q>div{flex:1}
+.card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.card.best{background:var(--soft)}
+.lb{font-size:11px;color:var(--text-3);font-weight:400}
+.sp{display:flex;justify-content:space-between;align-items:baseline}
+.tm{font-size:22px;color:var(--text);line-height:1.2}
+.tm .lb{margin:0 6px}
+.old{font-size:13px;color:var(--text-3);text-decoration:line-through;margin-left:6px}
+.arr{font-weight:500}
+.t{display:grid;grid-template-columns:36px minmax(0,1fr) 76px;column-gap:8px;row-gap:2px;align-items:baseline;margin-top:8px;padding-top:6px;border-top:1px solid var(--line-soft)}
+.t>:nth-child(3n){text-align:right}
+.ru,.pv{color:var(--text)}
+.ru{font-weight:500}
+.m{font-size:16px;font-weight:var(--m-weight)}
+.g{color:var(--good)}.a{color:var(--tight)}.r{color:var(--missed)}
+.d{display:grid;grid-template-columns:minmax(0,1fr) 44px 56px;column-gap:8px;row-gap:6px;align-items:baseline}
+.d>:nth-child(3n),.d>:nth-child(3n+2){text-align:right}
+.slow{color:var(--text);font-weight:500}
+.bar{display:flex;gap:8px;margin-top:12px}
+button{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.bar button:last-child{flex:1}
+button svg{display:block}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="back" viewBox="0 0 24 24"><path d="M5 12h14M5 12l6 6M5 12l6-6"/></symbol>
+  <symbol id="right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="flag" viewBox="0 0 24 24"><path d="M5 21V4M5 5h12l-2.5 4L17 13H5"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></symbol>
+</svg>
+
+<h1>Trafikkbilde – godkjent skisse</h1>
+<p class="note">Godkjent 13. november 2026. Køtallene på forsiden og detaljskjermen er fra 10. november 2026. Kortene er eksempler.</p>
+
+<div class="wrap">
+  <div>
+    <p class="cap">Forsiden når det er kø</p>
+    <div class="ph">
+      <div class="top">
+        <div class="seg"><span>Til jobb</span><span class="on">Fra jobb</span></div>
+        <button aria-label="Innstillinger"><svg class="ic"><use href="#gear"/></svg></button>
+      </div>
+      <div class="q">
+        <svg class="ic"><use href="#car"/></svg>
+        <div><p class="pv">Kø Lyngbø → Frieda Fasmer</p><p class="n">24 min nå, normalt 5 · øker</p></div>
+        <svg class="ic"><use href="#right"/></svg>
+      </div>
+      <div class="card best">
+        <div class="sp"><p class="lb">Avgang Birkelandsskiftet</p><p class="lb">Fremme Krokåsskiftet</p></div>
+        <div class="sp"><p class="tm n">15:50<span class="lb">rutetid</span></p><p class="tm arr n">17:12</p></div>
+        <div class="t">
+          <span class="lb">Rute</span><span class="lb">Holdeplass</span><span class="lb">Overgangstid</span>
+          <span class="ru">1</span><span>Birkelandsskiftet, plattform A</span><span></span>
+          <span class="ru">490</span><span>Strandkaiterminalen</span><span class="m n g">6:10</span>
+          <span class="ru">403</span><span>Kleppestø terminal</span><span class="m n a">1:40</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="lb">Avgang Grana</p>
+        <div class="sp"><p class="tm n">15:46<span class="old">15:44</span></p><p class="tm arr n"><span class="lb">kø</span>17:31</p></div>
+        <div class="t">
+          <span class="ru">57</span><span>Grana</span><span></span>
+          <span class="ru">50E</span><span>Birkelandsskiftet, plattform C</span><span class="m n g">3:20</span>
+          <span class="ru">400</span><span>Møhlenpris</span><span class="m n g">9:40</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="lb">Avgang Birkelandsskiftet</p>
+        <div class="sp"><p class="tm n">15:50<span class="lb">rutetid</span></p><p class="tm arr n"><span class="lb">kø</span>17:38</p></div>
+        <div class="t">
+          <span class="ru">1</span><span>Birkelandsskiftet, plattform A</span><span></span>
+          <span class="ru">400</span><span>Bergen busstasjon, plattform Q</span><span class="m n g">12:30</span>
+        </div>
+      </div>
+      <div class="bar">
+        <button aria-label="Merk"><svg class="ic" style="width:16px;height:16px"><use href="#flag"/></svg></button>
+        <button>Jeg er på 1 fra 15:50</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Om bord når det er kø foran</p>
+    <div class="ph">
+      <p class="hd">Du er på 400 mot Bergen busstasjon</p>
+      <div class="q">
+        <svg class="ic"><use href="#car"/></svg>
+        <div><p class="pv">Kø Frieda Fasmer → Lyngbø</p><p class="n">19 min nå, normalt 5 · øker</p></div>
+        <svg class="ic"><use href="#right"/></svg>
+      </div>
+      <div class="card best">
+        <p class="lb">Fremme Birkelandsskiftet</p>
+        <p class="tm arr n">08:02</p>
+        <div class="t">
+          <span class="lb">Rute</span><span class="lb">Holdeplass</span><span class="lb">Overgangstid</span>
+          <span class="ru">23E</span><span>Frieda Fasmer</span><span class="m n g">4:00</span>
+          <span class="ru">51</span><span>Dolvik, plattform B</span><span class="m n g">3:10</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="tm arr n">08:17</p>
+        <div class="t">
+          <span class="ru">23</span><span>Storavatnet, plattform B</span><span class="m n g">6:50</span>
+          <span class="ru">50E</span><span>Dolvik, plattform B</span><span class="m n a">1:30</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="tm arr n">08:31<span class="lb">kø</span></p>
+        <div class="t">
+          <span class="ru">50E</span><span>Møhlenpris</span><span class="m n a">2:20</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="tm arr n">08:44<span class="lb">kø</span></p>
+        <div class="t">
+          <span class="ru">1</span><span>Bergen busstasjon, plattform A</span><span class="m n a">1:15</span>
+        </div>
+      </div>
+      <div class="bar">
+        <button aria-label="Merk"><svg class="ic" style="width:16px;height:16px"><use href="#flag"/></svg></button>
+        <button>Jeg har byttet</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Detaljer når du trykker på kølinjen</p>
+    <div class="ph">
+      <p class="hd" style="padding-bottom:10px"><svg class="ic"><use href="#back"/></svg>Trafikk mot Storavatnet</p>
+      <div class="card best" style="margin-top:0">
+        <p class="lb">Bergen busstasjon → Storavatnet</p>
+        <div class="sp"><p class="tm arr n">47 min</p><p>normalt 17 min</p></div>
+        <p style="margin-top:4px">Øker. Køen var 18 min for en halvtime siden.</p>
+      </div>
+      <div class="card">
+        <div class="d">
+          <span class="lb">Delstrekning</span><span class="lb">Nå</span><span class="lb">Normalt</span>
+          <span>Bergen busstasjon → Lars Hilles gate</span><span class="n">3</span><span class="n">3</span>
+          <span>Lars Hilles gate → Møhlenpris</span><span class="n">4</span><span class="n">3</span>
+          <span class="slow">Møhlenpris → Lyngbø</span><span class="slow n">14</span><span class="n">5</span>
+          <span class="slow">Lyngbø → Frieda Fasmer</span><span class="slow n">24</span><span class="n">5</span>
+          <span>Frieda Fasmer → Storavatnet</span><span class="n">2</span><span class="n">1</span>
+        </div>
+      </div>
+      <p class="lb" style="margin-top:10px;padding:0 2px">Minutter. Målt på linje 400, 410, 445, 450 og 460. Nyeste måling er 3 min gammel.</p>
+      <p class="lb" style="margin-top:6px;padding:0 2px">Tallene viser hva bussene foran faktisk brukte. De er ikke en spådom.</p>
+    </div>
+  </div>
+
+  <div class="pn">
+    <p class="cap">Kølinjen i tre tilstander</p>
+    <p class="lb">Køen vokser</p>
+    <div class="q" style="margin-top:4px">
+      <svg class="ic"><use href="#car"/></svg>
+      <div><p class="pv">Kø Lyngbø → Frieda Fasmer</p><p class="n">24 min nå, normalt 5 · øker</p></div>
+      <svg class="ic"><use href="#right"/></svg>
+    </div>
+    <p class="lb" style="margin-top:14px">Køen står stille</p>
+    <div class="q" style="margin-top:4px">
+      <svg class="ic"><use href="#car"/></svg>
+      <div><p class="pv">Kø Lyngbø → Frieda Fasmer</p><p class="n">27 min nå, normalt 5 · uendret</p></div>
+      <svg class="ic"><use href="#right"/></svg>
+    </div>
+    <p class="lb" style="margin-top:14px">Køen løser seg opp</p>
+    <div class="q" style="margin-top:4px">
+      <svg class="ic"><use href="#car"/></svg>
+      <div><p class="pv">Kø Lyngbø → Frieda Fasmer</p><p class="n">12 min nå, normalt 5 · minker</p></div>
+      <svg class="ic"><use href="#right"/></svg>
+    </div>
+    <p class="lb" style="margin-top:14px">Ingen kø</p>
+    <p style="margin-top:4px">Linjen vises ikke.</p>
+  </div>
+</div>
+</body>
+</html>

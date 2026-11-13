@@ -1,0 +1,232 @@
+# Skyss-reise: konsept og faseplan
+
+Konseptet ble godkjent 13. november 2026. Fase 1 (design) ble ferdig samme dag. Fase 2 er påbegynt; se status under fasen.
+
+## Formål
+
+En app for iPhone og Android som gjør pendlingen mellom Krokåsskiftet og Birkelandsskiftet / Grana enklere å styre, særlig valget av bytte mens man sitter på bussen. Appen er til eget bruk.
+
+## Konsept
+
+### Reisetyper og alternativer
+
+- To reisetyper: Til jobb og Fra jobb, hver med faste start- og målholdeplasser.
+- Jobben ligger i Lønningsflaten 22. Grana er nærmeste holdeplass, men det går sjelden buss derfra, så brukeren må ofte gå til eller fra Birkelandsskiftet. Det er grunnen til at reisetypene har to holdeplasser i jobbenden. Gangen mellom jobben og holdeplassen er dermed en del av reisen.
+- Reisen regnes fra dør til dør (avgjort 13. november 2026): Til jobb viser når brukeren er fremme på jobben, Fra jobb viser når brukeren må gå fra jobben. Hvert sted har holdeplasser med gangtid.
+- Bare Skyss-linjer brukes. Flybussen er ikke med i periodebilletten.
+- Hver reisetype har lagrede alternativer: kjeder av etapper. En etappe har fra-holdeplass, til-holdeplass og én eller flere ruter, eller er gange.
+- Alternativene finnes i en kartleggingsøkt: appen søker hos Entur på flere måter gjennom et tidsrom, slår sammen funnene, og brukeren huker av dem som skal lagres. De kan også bygges manuelt etappe for etappe. Etter lagring skal brukeren ikke trenge å forholde seg til dem igjen.
+- Buss, bybane og båt. Askøybåten (linje 490, Kleppestø–Strandkaien) bygges manuelt fordi Entur ofte utelater den fra reiseforslag.
+- Egen gangtid per bytte. Enturs anslag er utgangspunktet og kan overstyres.
+- Plattformbokstav vises på terminalene, både for avstigning og påstigning.
+
+### Før avreise
+
+- Neste avganger per alternativ med sanntid, ankomsttid og om byttene holder.
+- Reisetid nå ved siden av rutetid.
+- For busser som ikke har startet: Enturs typiske forsinkelse (median og «dårlig dag»).
+
+### Om bord-modus
+
+- Brukeren velger bussen de sitter på, og appen følger den.
+- For hvert byttested fremover: ankomst dit, neste avgang derfra, margin etter gangtid og ankomst ved målet.
+- Margin vises med sekunder (`9:18`) og merkes trygg, knapp eller tapt.
+- Beste alternativ står øverst og oppdateres omtrent hvert 20.–30. sekund.
+- Brukeren trykker «byttet», og appen fortsetter med neste buss i kjeden.
+
+### Hvor tidene kommer fra
+
+- Enturs sanntidsprognose for alle tider og marginer på busser som er underveis.
+- Enturs typiske forsinkelse (`empiricalDelay`, p50 og p90) for busser som ikke har startet.
+- Bybanen og båten regnes som presise og vises med rutetid. Entur har ikke sanntid for dem.
+- Appen lager ingen egne ankomsttider.
+
+### Trafikkbilde
+
+- For strekninger med mye trafikk (for eksempel rv. 555 Bergen–Storavatnet): kjøretid nå mot normalt, hvor køen står, og om den øker eller minker.
+- Bygger på faktiske passeringstider for alle linjer som kjører de samme delstrekningene.
+- Tabellen over linjer per delstrekning lages automatisk fra rutedataene.
+- Trafikkbildet beskriver og advarer. Det spår ikke ankomsttider.
+
+### Logging og overvåking
+
+Målet er å fange feil, mangler og forbedringer fra telefonen mens appen utvikles.
+
+Dette logges:
+
+- **Bruk:** skjermer som åpnes, valgt reisetype og alternativ, valgt buss, «byttet», og om anbefalingen ble fulgt.
+- **Beslutningsgrunnlag:** hver anbefaling appen viser, med tallene bak (prognose, margin, gangtid), og hver gang anbefalingen endrer seg.
+- **Fasit:** faktiske ankomst- og avgangstider hentet i ettertid, slik at anbefalingene kan vurderes.
+- **Teknisk:** Entur-kall (svartid, feil, gamle data), JavaScript-feil og krasj, appversjon og nettverkstilstand.
+- **Egne notater:** en «merk»-knapp som lagrer et notat sammen med et øyeblikksbilde av det appen viste.
+- **GPS-posisjon:** under en aktiv reise, omtrent hvert tiende sekund og ved hver hendelse (valgt buss, «byttet», «merk»), med nøyaktighet, fart og retning.
+
+Slik lagres det:
+
+- Loggen sendes til PostHog med lagring i EU (valgt 13. november 2026). EU-regionen velges ved oppsett og kan ikke endres etterpå.
+- PostHogs SDK mellomlagrer hendelser på telefonen og sender dem når det er dekning.
+- Skjermopptak av økter og feilrapporter med krasj hører med, siden appen kjøres som eget bygg på telefonen.
+- Claude Code kobles til PostHog, slik at logg og feil kan leses direkte under utviklingen.
+
+GPS-loggen brukes til å måle faktisk gangtid på byttene, kontrollere hvilken buss brukeren satt på, og som grunnlag for automatisk gjenkjenning senere.
+
+Loggen gir også prognosene underveis på ekte reiser, noe Enturs historikk mangler. Dermed kan den svare på det åpne spørsmålet om hvor godt sanntidsprognosen treffer i kø.
+
+### Rammer
+
+- Expo (React Native + TypeScript). iPhone er daglig telefon; Android skal også støttes.
+- Appen bygges og installeres som eget bygg på iPhonen fra første versjon. Det krever Apple-utviklerkonto, som brukeren oppretter. Bygget lages i skyen, siden utviklingsmaskinen er Linux.
+- Ingen egen server i første versjon. Appen snakker direkte med Entur og må være åpen for å oppdatere seg.
+- Buss og bytte velges manuelt i første versjon.
+
+### Bekreftet 13. november 2026
+
+- Bare lagrede alternativer vises og rangeres. Kan ingen av dem brukes, vises et vanlig Entur-søk som reserve.
+- Gangtiden lagres per byttested og gjelder alle alternativer som bruker det.
+- GPS logges bare under en aktiv reise, fra om bord-modus starter til brukeren er fremme, ikke ellers i døgnet.
+- Appen velger reisetype etter posisjon ved åpning, med klokkeslett som reserve. Det krever posisjon også når appen åpnes, men den posisjonen logges ikke.
+
+### Åpent
+
+- Hvor godt Enturs sanntidsprognose treffer i tung kø. Måles med loggen fra fase 5.
+- Hvor ofte prognosen oppdateres, altså hvor mye sekundene hopper.
+
+## Faser
+
+Rekkefølgen er avtalt slik: faser, deretter design sammen, deretter implementasjon.
+
+### Fase 1: Design
+
+Skjermskisser utvikles sammen før noe bygges.
+
+- Om bord: godkjent 13. november 2026, se `docs/design/om-bord.md`
+- Før avreise: godkjent 13. november 2026, se `docs/design/for-avreise.md`
+- Hjem med reisetyper: utgår. Før avreise er forsiden, med bryter mellom Til jobb og Fra jobb.
+- Alternativer: kartleggingen godkjent 13. november 2026, se `docs/design/alternativer.md`. Skjermene for å justere lagrede alternativer er tegnet, men ikke uttrykkelig godkjent.
+- Trafikkbilde: godkjent 13. november 2026, se `docs/design/trafikkbilde.md`
+- «Merk», logg og turrapport: godkjent 13. november 2026, se `docs/design/merk-og-logg.md`
+
+Alle skjermene er dermed tegnet og fase 1 er ferdig. De åpne valgene ble avklart med brukeren samme dag og står i hver designfil. Det som fortsatt er åpent, er smått og står under «Ikke avgjort» i filene.
+
+De andre skjermene skal låne uttrykket fra om bord-skjermen.
+
+Ferdig når skissene for alle skjermene er godkjent.
+
+### Fase 2: Grunnmur og logging
+
+- Expo-prosjekt og git i `skyss-reise`.
+- Eget bygg installert på iPhonen, med oppdateringer uten nytt bygg for endringer i JavaScript.
+- Entur-klient med typer og tester for kjernelogikken.
+- PostHog koblet til: hendelser, feil og krasj, skjermopptak, «merk»-knapp.
+- GPS-logging under aktiv reise, også med låst skjerm.
+- Claude Code koblet til PostHog.
+
+Ferdig når appen viser en ekte avgangstavle for Krokåsskiftet på telefonen uten å være koblet til utviklingsmaskinen, og hendelser, feil og GPS-spor fra telefonen kan leses i PostHog.
+
+Status 13. november 2026:
+
+- Gjort: git, Expo-prosjekt (SDK 58), Entur-klient, kjernelogikk for overgangstid og avgangsmerking med tester, og en avgangstavle for Krokåsskiftet som er kontrollert i nettleser mot ekte Entur-data.
+- Gjenstår: eget bygg på iPhonen, PostHog, «merk»-knapp, GPS-logging og kobling fra Claude Code til PostHog. Alt dette venter på kontoer hos Apple, Expo og PostHog, som brukeren oppretter.
+- Loggen går foreløpig bare til konsollen, gjennom `src/logging/logger.ts`. PostHog kobles på der.
+- `ET-Client-Name` mot Entur er en nøytral standardverdi. Brukeren bør sette sin egen i `EXPO_PUBLIC_ENTUR_CLIENT_NAME`.
+- Lint er ikke satt opp.
+
+### Fase 3: Reisetyper og alternativer
+
+- Datamodell for reisetyper, alternativer, etapper og bytter, med flere ruter per etappe.
+- Kartlegging: søk hos Entur på flere måter, sammenslåing, gruppering og lagring av valgte.
+- Bygge og justere alternativer manuelt, inkludert båten.
+- Gangtid per bytte og plattformvisning.
+
+Ferdig når de faktiske alternativene for Til jobb og Fra jobb er lagret i appen.
+
+### Fase 4: Før avreise
+
+- Neste avganger per alternativ med sanntid.
+- Margin per bytte med sekunder og status.
+- Reisetid nå mot rutetid, og typisk forsinkelse for busser som ikke har startet.
+
+Ferdig når appen kan brukes til å velge avgang hjemmefra og fra jobb.
+
+### Fase 5: Om bord-modus
+
+- Velge buss og følge den.
+- Rangere bytter fremover og vise beste alternativ.
+- «Byttet» og videre til neste buss.
+- Reservesøk hos Entur når alle lagrede alternativer ryker.
+- Turrapport fra loggen: hva appen anbefalte, hva som ble valgt, og hva som faktisk skjedde.
+
+Ferdig når en hel reise til jobb med tre–fire bytter er gjennomført med appen, og turrapporten kan leses etterpå.
+
+### Fase 6: Trafikkbilde
+
+- Tabell over linjer per delstrekning, laget fra rutedataene.
+- Kjøretid nå mot normalt og hvor køen står.
+- Advarsel på bytter som trues av kø.
+
+Ferdig når trafikkbildet for rv. 555 vises i appen og stemmer med faktiske passeringer.
+
+### Fase 7: Android
+
+- Android-bygg og test på en Android-telefon.
+
+### Senere
+
+- Avgangsvarsel med grenseverdi («57 går fra Grana om 6 min»). Krever en liten server for push til iPhone.
+- Visning på låseskjermen.
+- Automatisk gjenkjenning av buss og bytte med GPS.
+
+## Referanse: Entur
+
+Alle kall trenger headeren `ET-Client-Name`. Ingen API-nøkkel.
+
+| Hva | Hvor |
+|---|---|
+| Reisesøk, avgangstavler, sanntid per avgang | `https://api.entur.io/journey-planner/v3/graphql` |
+| Holdeplassøk | `https://api.entur.io/geocoder/v1/autocomplete` |
+| Råstrøm sanntid for Skyss (maks 4 kall i minuttet) | `https://api.entur.io/realtime/v1/rest/et?datasetId=SKY` |
+| Historikk: planlagt og faktisk tid per stopp fra 2020 | BigQuery-tabellen `realtime_siri_et_last_recorded`, se `https://data.entur.no/public/datasets/realtime_siri_et` |
+| Historikk som CSV per dag og datakilde | `https://siri-data-exporter.entur.no/` |
+
+Nyttige felt i reiseplanleggeren:
+
+- `EstimatedCall.expectedArrivalTime` / `expectedDepartureTime`: sanntidsprognose med sekunder.
+- `EstimatedCall.actualArrivalTime` / `actualDepartureTime`: faktisk tid, bare for avganger som er underveis.
+- `EstimatedCall.empiricalDelay { p50 p90 }`: typisk forsinkelse per stopp for avgangen.
+- `EstimatedCall.predictionInaccurate`: flagg for upålitelig prognose.
+- `Quay.publicCode`: plattformbokstav.
+
+Holdeplasser:
+
+| Navn | ID |
+|---|---|
+| Krokåsskiftet | `NSR:StopPlace:32541` |
+| Birkelandsskiftet terminal | `NSR:StopPlace:58537` |
+| Grana | `NSR:StopPlace:29485` |
+| Bergen busstasjon | `NSR:StopPlace:30810` |
+| Møhlenpris | `NSR:StopPlace:30918` |
+| Lagunen terminal | `NSR:StopPlace:59849` |
+| Storavatnet terminal | `NSR:StopPlace:31984` |
+| Kleppestø terminal | `NSR:StopPlace:30815` |
+| Kleppestø båtkai | `NSR:StopPlace:32539` |
+| Strandkaiterminalen | `NSR:StopPlace:59223` |
+
+Gange fra jobben (Lønningsflaten 22), Enturs anslag 13. november 2026:
+
+| Holdeplass | Gangtid | Avstand | Merknad |
+|---|---|---|---|
+| Grana | 4 min | 260 m | Linje 57 og 99, sjeldne avganger |
+| Liland skole | 8 min | 510 m | Ikke undersøkt |
+| Blomsterdalen | 10 min | 720 m | Linje 51, 53 og 65. Entur brukte den i flere morgenforslag |
+| Bergen lufthavn | 18 min | 1300 m | Bybanens endestopp og flybussene |
+| Birkelandsskiftet terminal | 20 min | 1470 m | |
+| Kokstadskiftet | 22 min | 1590 m | |
+
+Et søk helt fra og til adressen ga reisetider på 67–98 minutter dør til dør mandag 16. november 2026.
+
+Funn fra utforskingen:
+
+- Reiseplanleggeren beholder ikke sanntid for avganger som er ferdige. Historikk må hentes fra datasettet over.
+- Bybanen (linje 1) og båten (linje 490) har ingen registrerte tider i historikken.
+- 10. november 2026 var det tung kø på rv. 555 mellom Møhlenpris og Frieda Fasmer. Linje 400 brukte opptil 70 minutter fra Bergen busstasjon til Krokåsskiftet mot 35 i ruten. 12. november var en vanlig rushdag. De to dagene er gode testdata.
+- Et eget anslag basert på bussene foran hang 20–30 minutter etter i køen, og er derfor tatt ut av konseptet.

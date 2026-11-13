@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alternativer og kartlegging – skisser</title>
+<style>
+:root{
+  --page:#f1efe8; --phone:#ffffff; --soft:#f7f6f2;
+  --text:#1f1f1e; --text-2:#5f5e5a; --text-3:#888780;
+  --line:#d3d1c7; --line-soft:#e6e4dc;
+  --fill:#1f1f1e; --on-fill:#ffffff;
+  --tag-bg:#e6f1fb; --tag-text:#0c447c; --danger:#a32d2d;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --page:#1c1c1a; --phone:#262624; --soft:#30302d;
+    --text:#f1efe8; --text-2:#b4b2a9; --text-3:#888780;
+    --line:#4a4a46; --line-soft:#3a3a37;
+    --fill:#f1efe8; --on-fill:#1f1f1e;
+    --tag-bg:#0c447c; --tag-text:#b5d4f4; --danger:#f09595;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 16px;background:var(--page);color:var(--text-2);font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+h1{font-size:18px;font-weight:500;color:var(--text);text-align:center;margin:0 0 4px}
+h2{font-size:15px;font-weight:500;color:var(--text);text-align:center;margin:32px 0 4px}
+.note{text-align:center;margin:0 0 16px}
+.wrap{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;align-items:flex-start}
+.cap{font-size:12px;text-align:center;margin:0 0 8px}
+.ph{width:320px;background:var(--phone);border:1px solid var(--line);border-radius:28px;padding:16px 12px}
+.ph p{margin:0}
+.n{font-variant-numeric:tabular-nums}
+.hd{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:500;color:var(--text);padding:0 2px 10px}
+.ic{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.seg{display:flex;background:var(--soft);border-radius:10px;padding:3px}
+.seg span{flex:1;text-align:center;padding:5px 0;border-radius:8px;font-size:14px}
+.seg .on{background:var(--phone);border:1px solid var(--line);color:var(--text);font-weight:500}
+.row{padding:9px 2px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.row.mid{align-items:center}
+.row>p:first-child{white-space:nowrap}
+.ch{color:var(--text);font-weight:500;font-size:14px}
+.pv{color:var(--text)}
+.lb{font-size:11px;color:var(--text-3)}
+.gr{font-size:12px;font-weight:500;color:var(--text);background:var(--soft);border-radius:6px;padding:3px 8px;margin-top:12px}
+.bx{flex:0 0 auto;width:22px;height:22px;border-radius:6px;border:1px solid var(--text-3);display:flex;align-items:center;justify-content:center;margin-top:2px}
+.bx.on{background:var(--fill);color:var(--on-fill);border-color:transparent}
+.bx .ic{width:14px;height:14px;stroke-width:2}
+.tag{font-size:11px;padding:1px 7px;border-radius:8px;background:var(--tag-bg);color:var(--tag-text);margin-left:6px;font-weight:400}
+.chip{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:1px 8px;color:var(--text);margin:0 0 4px 4px}
+.chip.b{font-weight:500;margin:0 4px 0 0;padding:2px 8px}
+.card{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.t{display:grid;grid-template-columns:62px minmax(0,1fr) 52px;column-gap:8px;row-gap:6px;align-items:baseline}
+.t>:nth-child(3n){text-align:right}
+.ru{color:var(--text);font-weight:500}
+.bar{display:flex;gap:8px;margin-top:10px}
+button{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 12px;flex:1}
+button.pri{background:var(--fill);color:var(--on-fill);border-color:transparent}
+.del{text-align:center;margin-top:14px !important;color:var(--danger)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="back" viewBox="0 0 24 24"><path d="M5 12h14M5 12l6 6M5 12l6-6"/></symbol>
+  <symbol id="right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+</svg>
+
+<h1>Alternativer og kartlegging</h1>
+<p class="note">Kartleggingen ble godkjent 13. november 2026. Tallene i resultatlisten er fra en prøvekartlegging mot Entur.</p>
+
+<div class="wrap">
+  <div>
+    <p class="cap">Sette opp kartlegging</p>
+    <div class="ph">
+      <p class="hd"><svg class="ic"><use href="#back"/></svg>Kartlegg alternativer</p>
+      <div class="row"><p>Reisetype</p><p class="pv">Fra jobb</p></div>
+      <div class="row"><p>Fra</p><p class="pv" style="text-align:right">Birkelandsskiftet, Grana</p></div>
+      <div class="row"><p>Til</p><p class="pv">Krokåsskiftet</p></div>
+      <div class="row"><p>Tidsrom</p><p class="pv n">Hverdager 14:30–17:00</p></div>
+      <div class="row"><p>Søk også via</p><div style="text-align:right"><span class="chip">Strandkaiterminalen</span><span class="chip">Kokstadskiftet</span><span class="chip">+ Holdeplass</span></div></div>
+      <p style="margin:12px 2px 0">Appen søker gjennom hele tidsrommet på flere måter: vanlig søk, med flere bytter, med mer gange, og på nytt uten de linjene som går igjen i forslagene.</p>
+      <div class="bar"><button class="pri">Start kartlegging</button></div>
+      <p class="lb" style="text-align:center;margin-top:8px">Tar omtrent to minutter</p>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Resultat av kartlegging</p>
+    <div class="ph">
+      <p class="hd"><svg class="ic"><use href="#back"/></svg>19 alternativer funnet</p>
+      <p class="lb" style="padding:0 2px">Fra jobb · Birkelandsskiftet til Krokåsskiftet · gruppert etter siste bytte</p>
+
+      <p class="gr">Via Storavatnet</p>
+      <div class="row"><div><p class="ch">51, 50E → 23, 23E → 400, 410<span class="tag">Ny</span></p><p>Dolvik · Storavatnet</p><p class="n">51–64 min · 2 bytter · ingen gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+      <div class="row"><div><p class="ch">1 → 23, 23E → 400, 410</p><p>Sandslivegen · Storavatnet</p><p class="n">50–67 min · 2 bytter · 110 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+      <div class="row"><div><p class="ch">Gå → 23, 23E → 400, 410</p><p>Kokstadskiftet · Storavatnet</p><p class="n">56–84 min · 1 bytte · 590 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+      <div class="row"><div><p class="ch">53 → 23E → 400<span class="tag">Ny</span></p><p>Gomarshaug · Storavatnet</p><p class="n">72 min · 2 bytter · ingen gange</p></div><span class="bx"></span></div>
+
+      <p class="gr">Via Møhlenpris</p>
+      <div class="row"><div><p class="ch">50E → 400, 410</p><p>Møhlenpris</p><p class="n">57–69 min · 1 bytte · 190 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+
+      <p class="gr">Via Bergen busstasjon</p>
+      <div class="row"><div><p class="ch">1, 51 → 400, 410<span class="tag">Ny</span></p><p>Bergen busstasjon</p><p class="n">61–77 min · 1 bytte · 110 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+      <div class="row"><div><p class="ch">1 → 67 → 410</p><p>Lagunen · Bergen busstasjon</p><p class="n">60 min · 2 bytter · 240 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+
+      <p class="gr">Med båt</p>
+      <div class="row"><div><p class="ch">50E → gå → 490 → 400<span class="tag">Ny</span></p><p>Festplassen · Strandkaiterminalen · Kleppestø</p><p class="n">79 min · 2 bytter · 790 m gange</p></div><span class="bx"></span></div>
+      <div class="row"><div><p class="ch">1 → gå → 490 → 400</p><p>Byparken · Strandkaiterminalen · Kleppestø</p><p class="n">82–117 min · 2 bytter · 670 m gange</p></div><span class="bx on"><svg class="ic"><use href="#check"/></svg></span></div>
+
+      <div class="row mid" style="border-bottom:0;margin-top:6px"><p>Vis 10 sjeldnere forslag</p><svg class="ic"><use href="#down"/></svg></div>
+
+      <div class="bar"><button>Søk via holdeplass</button><button>Bygg selv</button></div>
+      <div class="bar"><button class="pri">Lagre 7 valgte</button></div>
+    </div>
+  </div>
+</div>
+
+<h2>Justere lagrede alternativer</h2>
+<p class="note">Godkjent 13. november 2026. Gangtidene er eksempler.</p>
+
+<div class="wrap">
+  <div>
+    <p class="cap">Liste over alternativer</p>
+    <div class="ph">
+      <p class="hd"><svg class="ic"><use href="#back"/></svg>Alternativer</p>
+      <div class="seg"><span>Til jobb</span><span class="on">Fra jobb</span></div>
+      <div style="margin-top:6px">
+        <div class="row mid"><div><p class="ch">50E → 400, 410</p><p>Møhlenpris</p></div><svg class="ic"><use href="#right"/></svg></div>
+        <div class="row mid"><div><p class="ch">1, 51 → 400, 410</p><p>Bergen busstasjon</p></div><svg class="ic"><use href="#right"/></svg></div>
+        <div class="row mid"><div><p class="ch">1 → gå → 490 → 400</p><p>Byparken · Strandkaiterminalen · Kleppestø</p></div><svg class="ic"><use href="#right"/></svg></div>
+      </div>
+      <p class="lb" style="margin-top:10px;padding:0 2px">Alle ender på Krokåsskiftet</p>
+      <div class="bar"><button>Kartlegg</button><button>Bygg selv</button></div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Redigere ett alternativ</p>
+    <div class="ph">
+      <p class="hd"><svg class="ic"><use href="#back"/></svg>Rediger alternativ</p>
+      <div class="card">
+        <div class="t">
+          <span class="lb">Rute</span><span class="lb">Strekning</span><span class="lb">Gangtid</span>
+          <span class="ru">400, 410</span><span>Krokåsskiftet → Bergen busstasjon</span><span></span>
+          <span class="ru">600, 67</span><span>Bergen busstasjon → Lagunen</span><span class="pv n">3:00</span>
+          <span class="ru">1</span><span>Lagunen → Birkelandsskiftet</span><span class="pv n">1:30</span>
+        </div>
+      </div>
+      <p class="lb" style="margin-top:8px;padding:0 2px">Trykk på en etappe for å endre den</p>
+      <div class="bar"><button>+ Legg til etappe</button></div>
+      <p class="del">Slett alternativ</p>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Endre én etappe</p>
+    <div class="ph">
+      <p class="hd"><svg class="ic"><use href="#back"/></svg>Etappe 2</p>
+      <div class="row"><p>Ruter</p><div style="text-align:right"><span class="chip b">600</span><span class="chip b" style="margin-right:0">67</span><p class="lb" style="margin-top:6px">Går også her: 99</p></div></div>
+      <div class="row"><p>Fra</p><p class="pv">Bergen busstasjon</p></div>
+      <div class="row"><p>Til</p><p class="pv">Lagunen</p></div>
+      <div class="row"><p>Gangtid hit</p><div style="text-align:right"><p class="pv n">3:00</p><p class="lb">Enturs anslag 3:03</p></div></div>
+      <div class="bar" style="margin-top:14px"><button>Ferdig</button></div>
+      <p class="del">Slett etappe</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
