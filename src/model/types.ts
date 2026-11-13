@@ -64,6 +64,38 @@ export interface Connection {
   legs: Leg[];
 }
 
+/** One platform of a stop: a side of the road, or a lettered platform at a terminal. */
+export interface QuayRef {
+  id: string;
+  /** Platform letter where the stop has one. */
+  platform: string | null;
+  stop: StopRef;
+}
+
+/**
+ * Walking time at a transfer where the traveller changes vehicle without a
+ * walking leg of its own. It is kept per pair of platforms, because the same
+ * stop can mean staying put when the next bus goes the same way and crossing
+ * the road when it goes the other.
+ */
+export interface TransferWalk {
+  key: string;
+  /** Where the traveller gets off. */
+  from: QuayRef;
+  /** Where the next vehicle leaves from. */
+  to: QuayRef;
+  /** The lines seen arriving at `from` and leaving from `to` in this transfer. */
+  fromLines: string[];
+  toLines: string[];
+  /** Entur's estimate, until the traveller sets their own. */
+  seconds: number;
+}
+
+/** Identifies a walk between two stops, places or platforms, in one direction. */
+export function walkKey(from: { id: string }, to: { id: string }): string {
+  return `${from.id}>${to.id}`;
+}
+
 /** An alternative found by a mapping run, with what the run learned about it. */
 export interface MappedAlternative extends Alternative {
   minDurationSeconds: number;

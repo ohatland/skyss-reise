@@ -29,8 +29,18 @@ export interface TripLegResponse {
   distance: number;
   duration: number;
   line: { id: string; publicCode: string | null } | null;
-  fromPlace: { name: string | null; quay: { stopPlace: { id: string; name: string } | null } | null };
-  toPlace: { name: string | null; quay: { stopPlace: { id: string; name: string } | null } | null };
+  fromPlace: TripPlaceResponse;
+  toPlace: TripPlaceResponse;
+}
+
+export interface TripPlaceResponse {
+  name: string | null;
+  quay: {
+    id: string;
+    /** Platform letter where the stop has one. */
+    publicCode: string | null;
+    stopPlace: { id: string; name: string } | null;
+  } | null;
 }
 
 export interface TripPatternResponse {
@@ -86,8 +96,8 @@ export function buildTripQuery(params: TripSearchParams): string {
         distance
         duration
         line { id publicCode }
-        fromPlace { name quay { stopPlace { id name } } }
-        toPlace { name quay { stopPlace { id name } } }
+        fromPlace { name quay { id publicCode stopPlace { id name } } }
+        toPlace { name quay { id publicCode stopPlace { id name } } }
       }
     }
   }

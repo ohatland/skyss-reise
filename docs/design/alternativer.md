@@ -104,6 +104,24 @@ Kjørt 13. november 2026 for Fra jobb, mandag 16. november kl. 14:30–16:50, me
 - **Forhåndsvalg:** første gang er alle som ikke er sjeldne, krysset av. Senere kartlegginger krysser av dem som allerede er lagret.
 - **Birkelandsskiftet har to ID-er hos Entur:** `NSR:StopPlace:58537` fra adressesøket og `NSR:StopPlace:30168` i reiseforslagene. Kode som sammenligner holdeplasser, må ta høyde for det.
 
+## Kartlegging for Til jobb
+
+Kjørt 13. november 2026, mandag 16. november kl. 06:30–08:30, med 49 søk. Resultat: 34 alternativer, 67–105 minutter dør til dør.
+
+- **Fortsatt mange.** To ting blåser opp listen. Det første er hjemmeenden: nesten alle reiser finnes både med 400 eller 410 direkte og med 403 til Kleppestø og 407 videre. Det andre er hvor brukeren går av: samme buss 51 står én gang med avstigning på Birkelandsskiftet og én gang på Blomsterdalen.
+- **Avgjort 13. november 2026:** motoren behandler de lagrede alternativene som et nett av etapper og kombinerer dem selv. En etappe fra ett alternativ kan følges av en etappe fra et annet der de møtes. Ingen holdeplass passeres to ganger, og en reise har høyst fem kjøretøy. Konsekvensen er at appen kan vise en kombinasjon brukeren ikke har sett i listen.
+
+## Gangtid ved bytte
+
+Avgjort 13. november 2026 etter brukerens beskrivelse: 0:00 er riktig for det meste, særlig når neste buss går samme vei, men på Møhlenpris må man krysse veien, og det tar omtrent 30 sekunder med hard løping.
+
+- **Gangtid gjelder per par av plattformer,** ikke per holdeplass. Samme holdeplass kan bety å bli stående eller å krysse veien.
+- **Entur skiller dem allerede.** På Møhlenpris gir Entur 2:32 fra 50E til 400 eller 410 (annen plattform) og 0:00 fra 50E til linje 3 (samme plattform). På Bergen busstasjon gir den 1:33 til 2:51 avhengig av plattform.
+- **Brukerens egen tid** settes på den ene plattformkombinasjonen og gjelder alle alternativer som bruker den. Å sette 0:30 på krysningen på Møhlenpris endrer ikke byttet til linje 3.
+- **Redigeringsskjermen** viser bare gangtidene som hører til linjene i de to etappene. Er det flere, merkes de med plattformbokstaver, eller «samme plattform» og «annen plattform» der holdeplassen ikke har bokstaver.
+- **Rekkefølge når motoren slår opp en gangtid:** brukerens tid for plattformparet, så Enturs tid for plattformparet, ellers 0.
+- **Nye funn for morgenen:** Bybanen fra Sandslivegen til Bergen lufthavn (17 minutter å gå til jobben), linje 53 til Ådlandsflaten (11 minutter), og linje 24 via Sandeide.
+
 ## Senere forbedring
 
 Kartleggingen bør vise hvor ofte hvert alternativ er raskest. Det lot seg ikke måle med Enturs søk alene: alternativene via Storavatnet og Møhlenpris ender på samme 400 eller 410 og kommer frem samtidig, og Entur viser bare noen av dem per søk. Tallet må regnes med appens egen motor, den samme som driver forsiden.

@@ -53,13 +53,13 @@ export function describeConnection(connection: Connection, side: PlaceSide): str
   return parts.join(', så ') + (walksOn ? ', så gå' : '');
 }
 
-/** "Fra jobb: gå 20 min · 57 fra Grana", or null when the alternative has no connections. */
+/** "Fra jobb: gå 20 min · 57 fra Grana", or null when there are no connections. */
 export function describeConnections(
-  alternative: MappedAlternative,
+  connections: Connection[],
   side: PlaceSide,
   placeName: string,
 ): string | null {
-  if (!side || alternative.connections.length === 0) return null;
-  const ways = alternative.connections.map((c) => describeConnection(c, side)).join(' · ');
+  if (!side || connections.length === 0) return null;
+  const ways = connections.map((c) => describeConnection(c, side)).join(' · ');
   return `${side === 'start' ? 'Fra' : 'Til'} ${placeName.toLowerCase()}: ${ways}`;
 }

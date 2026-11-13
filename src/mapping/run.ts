@@ -1,8 +1,8 @@
 import { osloIso } from '@/core/oslo-time';
 import { log } from '@/logging/logger';
-import { mergePatterns, toPattern, type TripPattern } from '@/mapping/pattern';
+import { mergePatterns, mergeTransferWalks, toPattern, type TripPattern } from '@/mapping/pattern';
 import type { TripPatternResponse, TripSearchParams } from '@/mapping/query';
-import type { MappedAlternative, StopRef, TripType } from '@/model/types';
+import type { MappedAlternative, StopRef, TransferWalk, TripType } from '@/model/types';
 
 export interface MappingConfig {
   tripType: TripType;
@@ -23,6 +23,8 @@ export interface MappingDeps {
 
 export interface MappingResult {
   alternatives: MappedAlternative[];
+  /** Entur's walking time at each transfer seen in the run. */
+  transferWalks: TransferWalk[];
   searches: number;
   failedSearches: number;
   /** Lines the run chose to search without, as line ids. */
@@ -127,5 +129,11 @@ export async function runMapping(config: MappingConfig, deps: MappingDeps): Prom
     alternatives: alternatives.length,
   });
 
-  return { alternatives, searches: total, failedSearches: failed, bannedLines: banned };
+  return {
+    alternatives,
+    transferWalks: mergeTransferWalks(patterns),
+    searches: total,
+    failedSearches: failed,
+    bannedLines: banned,
+  };
 }

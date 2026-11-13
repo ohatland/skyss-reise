@@ -1,8 +1,9 @@
-import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { leave, ScreenHeader } from '@/components/screen-header';
+import { TripTypeSwitch } from '@/components/trip-type-switch';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { nextWeekday, timesInWindow } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
@@ -13,16 +14,10 @@ import { searchTrips } from '@/mapping/query';
 import { runMapping, totalSearches, type MappingResult } from '@/mapping/run';
 import { DEFAULT_VIA_STOPS, TRIP_TYPES } from '@/model/places';
 import { placeSide, type Alternative, type Connection, type MappedAlternative, type PlaceSide, type TripTypeId } from '@/model/types';
-import { loadRoutes, saveRoutes, type SavedRoutes } from '@/storage/alternatives';
+import { loadRoutes, NO_ROUTES, saveMapping, type SavedRoutes } from '@/storage/alternatives';
 
 /** Minutes between the start times a mapping run searches. */
 const SEARCH_STEP_MINUTES = 20;
-
-/** Back to where the user came from, or to the front page when the screen was opened directly. */
-function leave(): void {
-  if (router.canGoBack()) router.back();
-  else router.replace('/');
-}
 
 type Phase =
   | { name: 'setup' }
@@ -34,7 +29,7 @@ export default function MappingScreen() {
   const theme = useTheme();
   const [tripTypeId, setTripTypeId] = useState<TripTypeId>('fromWork');
   const [phase, setPhase] = useState<Phase>({ name: 'setup' });
-  const [saved, setSaved] = useState<SavedRoutes>({ alternatives: [], connections: [] });
+  const [saved, setSaved] = useState<SavedRoutes>(NO_ROUTES);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showRare, setShowRare] = useState(false);
 
@@ -90,7 +85,7 @@ export default function MappingScreen() {
     });
   }, []);
 
-  const save = useCallback(async (found: MappedAlternative[]) => {
+  const save = useCallback(async ({ alternatives: found, transferWalks }: MappingResult) => {
     // Alternatives saved earlier that this run did not find are kept, with their connections.
     const foundKeys = new Set(found.map((a) => a.key));
     const keptAlternatives: Alternative[] = saved.alternatives.filter(
@@ -100,7 +95,7 @@ export default function MappingScreen() {
     const connections = new Map<string, Connection>();
     for (const c of saved.connections) if (c.tripType === tripTypeId) connections.set(c.key, c);
     for (const c of connectionsFor(chosen)) connections.set(c.key, c);
-    await saveRoutes(tripTypeId, [...keptAlternatives, ...chosen], [...connections.values()]);
+    await saveMapping(tripTypeId, [...keptAlternatives, ...chosen], [...connections.values()], transferWalks);
     leave();
   }, [saved, selected, tripTypeId]);
 
@@ -112,39 +107,17 @@ export default function MappingScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={leave} accessibilityRole="button" accessibilityLabel="Tilbake" hitSlop={12}>
-          <Text style={[styles.back, colors.text]}>←</Text>
-        </Pressable>
-        <Text style={[styles.heading, colors.text]}>
-          {phase.name === 'results'
+      <ScreenHeader
+        title={
+          phase.name === 'results'
             ? `${phase.result.alternatives.length} alternativer funnet`
-            : 'Kartlegg alternativer'}
-        </Text>
-      </View>
+            : 'Kartlegg alternativer'
+        }
+      />
 
       {phase.name === 'setup' && (
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={[styles.segment, { backgroundColor: theme.cardHighlight }]}>
-            {(Object.keys(TRIP_TYPES) as TripTypeId[]).map((id) => {
-              const active = id === tripTypeId;
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => setTripTypeId(id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  style={[
-                    styles.segmentItem,
-                    active && { backgroundColor: theme.background, borderColor: theme.border, borderWidth: 1 },
-                  ]}>
-                  <Text style={[styles.segmentText, active ? [colors.text, styles.medium] : colors.secondary]}>
-                    {TRIP_TYPES[id].label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <TripTypeSwitch value={tripTypeId} onChange={setTripTypeId} />
 
           <Field label="Fra" value={tripType.from.name} />
           <Field label="Til" value={tripType.to.name} />
@@ -218,7 +191,7 @@ export default function MappingScreen() {
           showRare={showRare}
           onToggle={toggle}
           onShowRare={() => setShowRare(true)}
-          onSave={() => save(phase.result.alternatives)}
+          onSave={() => save(phase.result)}
         />
       )}
     </SafeAreaView>
@@ -267,7 +240,7 @@ function Results({
 
   const row = (alternative: MappedAlternative) => {
     const checked = selected.has(alternative.key);
-    const connectionText = describeConnections(alternative, side, placeName);
+    const connectionText = describeConnections(alternative.connections, side, placeName);
     return (
       <Pressable
         key={alternative.key}
@@ -365,25 +338,11 @@ function Results({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.three,
-  },
-  back: { fontSize: 20 },
-  heading: { fontSize: FontSize.heading, fontWeight: '500' },
   content: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.five, gap: Spacing.one },
-  medium: { fontWeight: '500' },
   center: { textAlign: 'center' },
   body: { fontSize: FontSize.body, lineHeight: 19 },
   label: { fontSize: FontSize.label, lineHeight: 16 },
   numbers: { fontVariant: ['tabular-nums'] },
-  segment: { flexDirection: 'row', borderRadius: 10, padding: 3, marginBottom: Spacing.two },
-  segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 5, borderRadius: Radius.control },
-  segmentText: { fontSize: 14 },
   field: {
     flexDirection: 'row',
     justifyContent: 'space-between',

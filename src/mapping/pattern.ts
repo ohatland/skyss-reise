@@ -1,4 +1,4 @@
-import type { TripPatternResponse } from '@/mapping/query';
+import type { TripPatternResponse, TripPlaceResponse } from '@/mapping/query';
 import {
   placeRef,
   placeSide,
@@ -7,8 +7,11 @@ import {
   type MappedAlternative,
   type Place,
   type PlaceSide,
+  type QuayRef,
   type StopRef,
+  type TransferWalk,
   type TripType,
+  walkKey,
 } from '@/model/types';
 
 /** A walk between two stops shorter than this is a platform change, not a leg of its own. */
@@ -21,11 +24,19 @@ export interface TripPattern {
   /** Line id per transit leg, in order, for deciding which lines to search without. */
   lineIds: string[];
   durationSeconds: number;
+  /** Walking at each change of vehicle that has no walking leg of its own. */
+  transfers: TransferWalk[];
 }
 
-function stopOf(place: TripPatternResponse['legs'][number]['fromPlace']): StopRef | null {
+function stopOf(place: TripPlaceResponse): StopRef | null {
   const stop = place.quay?.stopPlace;
   return stop ? { id: stop.id, name: stop.name } : null;
+}
+
+function quayOf(place: TripPlaceResponse): QuayRef | null {
+  const stop = stopOf(place);
+  if (!place.quay || !stop) return null;
+  return { id: place.quay.id, platform: place.quay.publicCode || null, stop };
 }
 
 /** Identifies a chain of legs by the stops it passes, independent of line. */
@@ -39,6 +50,10 @@ export function toPattern(trip: TripPatternResponse, from: Place, to: Place): Tr
   const destination = placeRef(to);
   const legs: Leg[] = [];
   const lineIds: string[] = [];
+  const transfers: TransferWalk[] = [];
+  let arrivedAt: QuayRef | null = null;
+  let arrivedOn = '';
+  let walkedSeconds = 0;
 
   trip.legs.forEach((leg, index) => {
     const start = stopOf(leg.fromPlace) ?? (index === 0 ? origin : null);
@@ -50,24 +65,42 @@ export function toPattern(trip: TripPatternResponse, from: Place, to: Place): Tr
       const betweenStops = leg.distance > MIN_WALK_LEG_METERS;
       if (start.id !== end.id && (touchesPlace || betweenStops)) {
         legs.push({ kind: 'walk', from: start, to: end, seconds: leg.duration });
+        arrivedAt = null;
+      } else {
+        walkedSeconds += leg.duration;
       }
       return;
     }
 
     if (!leg.line) return;
+    const line = leg.line.publicCode ?? '';
+    const boardsAt = quayOf(leg.fromPlace);
+    if (arrivedAt && boardsAt) {
+      transfers.push({
+        key: walkKey(arrivedAt, boardsAt),
+        from: arrivedAt,
+        to: boardsAt,
+        fromLines: [arrivedOn],
+        toLines: [line],
+        seconds: walkedSeconds,
+      });
+    }
+    arrivedAt = quayOf(leg.toPlace);
+    arrivedOn = line;
+    walkedSeconds = 0;
     lineIds.push(leg.line.id);
     legs.push({
       kind: 'transit',
       from: start,
       to: end,
-      lines: [leg.line.publicCode ?? ''],
+      lines: [line],
       mode: leg.mode,
     });
   });
 
   if (!legs.some((leg) => leg.kind === 'transit')) return null;
 
-  return { key: chainKey(legs), legs, lineIds, durationSeconds: trip.duration };
+  return { key: chainKey(legs), legs, lineIds, durationSeconds: trip.duration, transfers };
 }
 
 /** Sorts line codes the way a timetable does: 23, 23E, 50E, 400. */
@@ -154,7 +187,8 @@ function split(legs: Leg[], side: PlaceSide, anchors: Set<string>): Split {
   return { trunk: legs, connection: [] };
 }
 
-function anchorOf(trunk: Leg[], side: PlaceSide): StopRef | null {
+/** The stop near the address where an alternative starts or ends. */
+export function anchorOf(trunk: Leg[], side: PlaceSide): StopRef | null {
   if (side === 'start') return trunk[0].from;
   if (side === 'end') return trunk[trunk.length - 1].to;
   return null;
@@ -227,6 +261,24 @@ export function mergePatterns(patterns: TripPattern[], tripType: TripType): Mapp
   }
 
   return merged.sort((a, b) => a.minDurationSeconds - b.minDurationSeconds);
+}
+
+/** Entur's walking time at every transfer the run saw, one entry per pair of stops. */
+export function mergeTransferWalks(patterns: TripPattern[]): TransferWalk[] {
+  const byKey = new Map<string, TransferWalk[]>();
+  for (const pattern of patterns) {
+    for (const transfer of pattern.transfers) {
+      const same = byKey.get(transfer.key);
+      if (same) same.push(transfer);
+      else byKey.set(transfer.key, [transfer]);
+    }
+  }
+  return [...byKey.values()].map((same) => ({
+    ...same[0],
+    fromLines: sortLines(same.flatMap((t) => t.fromLines)),
+    toLines: sortLines(same.flatMap((t) => t.toLines)),
+    seconds: Math.round(median(same.map((t) => t.seconds))),
+  }));
 }
 
 /** The connections the chosen alternatives need, each once. */

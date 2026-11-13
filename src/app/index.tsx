@@ -71,10 +71,10 @@ export default function DepartureBoardScreen() {
               : `${savedCount} lagrede alternativer`}
         </Text>
         <Pressable
-          onPress={() => router.push('/kartlegging')}
+          onPress={() => router.push('/alternativer')}
           accessibilityRole="button"
           style={[styles.button, { borderColor: theme.border }]}>
-          <Text style={{ color: theme.text, fontSize: FontSize.body }}>Kartlegg alternativer</Text>
+          <Text style={{ color: theme.text, fontSize: FontSize.body }}>Alternativer</Text>
         </Pressable>
       </View>
     </SafeAreaView>

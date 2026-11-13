@@ -29,7 +29,7 @@ type StopKey = keyof typeof stops;
 
 const at = (key: StopKey | null) => ({
   name: key ? stops[key].name : 'Origin',
-  quay: key ? { stopPlace: stops[key] } : null,
+  quay: key ? { id: `quay:${key}`, publicCode: null, stopPlace: stops[key] } : null,
 });
 
 function ride(line: string, from: StopKey, to: StopKey, mode = 'bus'): TripLegResponse {
@@ -157,8 +157,8 @@ describe('mergePatterns from an address', () => {
 
   it('gives every alternative from the same stop all the ways of getting there, walking first', () => {
     const expected = 'Fra jobb: gå 20 min · 57 fra Grana';
-    expect(describeConnections(viaMohlenpris, side, 'Jobb')).toBe(expected);
-    expect(describeConnections(viaStoravatnet, side, 'Jobb')).toBe(expected);
+    expect(describeConnections(viaMohlenpris.connections, side, 'Jobb')).toBe(expected);
+    expect(describeConnections(viaStoravatnet.connections, side, 'Jobb')).toBe(expected);
     expect(merged.find((a) => a.usesBoat)?.connections).toHaveLength(2);
   });
 
@@ -194,7 +194,7 @@ describe('mergePatterns from an address', () => {
       fromWork,
     );
 
-    expect(both.map((a) => describeConnections(a, side, 'Jobb')).sort()).toEqual([
+    expect(both.map((a) => describeConnections(a.connections, side, 'Jobb')).sort()).toEqual([
       'Fra jobb: gå 20 min · 57 fra Grana',
       'Fra jobb: gå 21 min · 57 fra Grana',
     ]);
@@ -246,7 +246,7 @@ describe('mergePatterns to an address', () => {
   });
 
   it('describes the ways on from there', () => {
-    expect(describeConnections(merged[0], side, 'Jobb')).toBe('Til jobb: gå 20 min · 57 til Grana');
+    expect(describeConnections(merged[0].connections, side, 'Jobb')).toBe('Til jobb: gå 20 min · 57 til Grana');
   });
 
   it('names the transfer stops and where the traveller gets off', () => {

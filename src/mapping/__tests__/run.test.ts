@@ -6,7 +6,10 @@ import { DEFAULT_VIA_STOPS, HOME, TRIP_TYPES, WORK } from '@/model/places';
 
 beforeEach(() => setLogSinks([]));
 
-const stop = (id: string, name: string) => ({ name, quay: { stopPlace: { id, name } } });
+const stop = (id: string, name: string) => ({
+  name,
+  quay: { id: `quay:${id}`, publicCode: null, stopPlace: { id, name } },
+});
 const leg = (line: string, from: [string, string], to: [string, string]) => ({
   mode: 'bus',
   distance: 5000,
