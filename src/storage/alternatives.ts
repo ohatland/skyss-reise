@@ -2,7 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { sortLines } from '@/mapping/pattern';
 import { log } from '@/logging/logger';
-import type { Alternative, Connection, MappedAlternative, TransferWalk, TripTypeId } from '@/model/types';
+import {
+  walkKey,
+  type Alternative,
+  type Connection,
+  type Leg,
+  type MappedAlternative,
+  type TransferWalk,
+  type TripTypeId,
+} from '@/model/types';
 
 const STORAGE_KEY = 'alternatives:v4';
 
@@ -42,6 +50,33 @@ export async function loadRoutes(): Promise<SavedRoutes> {
     log.error(error, { where: 'loadRoutes' });
     return NO_ROUTES;
   }
+}
+
+/**
+ * The lines saved on each stretch, by the walkKey of its two stops. Which lines
+ * the traveller takes belongs to the stretch, not to one alternative: a stretch
+ * has the same lines wherever it is ridden, in both trip types.
+ */
+function savedLines(routes: SavedRoutes): Map<string, string[]> {
+  const lines = new Map<string, string[]>();
+  for (const { legs } of [...routes.alternatives, ...routes.connections]) {
+    for (const leg of legs) {
+      const key = walkKey(leg.from, leg.to);
+      if (leg.kind === 'transit' && !lines.has(key)) lines.set(key, leg.lines);
+    }
+  }
+  return lines;
+}
+
+/** Gives the rides on stretches with lines in `lines` those lines. Other legs are left as they are. */
+function withLines<T extends { legs: Leg[] }>(route: T, lines: Map<string, string[]>): T {
+  return {
+    ...route,
+    legs: route.legs.map((leg) => {
+      const known = leg.kind === 'transit' ? lines.get(walkKey(leg.from, leg.to)) : undefined;
+      return leg.kind === 'transit' && known ? { ...leg, lines: known } : leg;
+    }),
+  };
 }
 
 let pending: Promise<unknown> = Promise.resolve();
@@ -93,9 +128,9 @@ export interface MappingToSave {
 /**
  * The saved routes after a mapping run for one trip type. Alternatives the run
  * did not find, including any built by hand meanwhile, are kept. A found one the
- * traveller left unchosen is removed. A chosen one that was already saved keeps
- * the lines the traveller gave it. Connections and walking times are added to
- * what is known.
+ * traveller left unchosen is removed. A stretch that was already saved keeps
+ * the lines the traveller gave it, also in alternatives and connections that
+ * are new. Connections and walking times are added to what is known.
  */
 export function mergeMapping(current: SavedRoutes, tripType: TripTypeId, mapping: MappingToSave): SavedRoutes {
   const foundKeys = new Set(mapping.found.map((a) => a.key));
@@ -105,12 +140,13 @@ export function mergeMapping(current: SavedRoutes, tripType: TripTypeId, mapping
   );
 
   const kept = current.alternatives.filter((a) => a.tripType === tripType && !foundKeys.has(a.key));
+  const lines = savedLines(current);
   const chosenNow = mapping.found
     .filter((a) => chosen.has(a.key))
-    .map((a) => savedBefore.get(a.key) ?? toAlternative(a));
+    .map((a) => savedBefore.get(a.key) ?? withLines(toAlternative(a), lines));
 
   const connections = new Map(current.connections.filter((c) => c.tripType === tripType).map((c) => [c.key, c]));
-  for (const c of mapping.connections) connections.set(c.key, c);
+  for (const c of mapping.connections) connections.set(c.key, withLines(c, lines));
 
   return {
     ...current,
@@ -131,26 +167,35 @@ export async function saveMapping(tripType: TripTypeId, mapping: MappingToSave):
   return next;
 }
 
-/** Adds one alternative, such as one built by hand, with any connections it needs. */
+/**
+ * Adds one alternative, such as one built by hand, with any connections it needs.
+ * On a stretch that is saved already, it takes the lines saved there.
+ */
 export async function addAlternative(alternative: Alternative, connections: Connection[] = []): Promise<SavedRoutes> {
   log.event('alternative_added', { tripType: alternative.tripType, legs: alternative.legs.length });
   return update((current) => {
     const known = new Set(current.connections.map((c) => c.key));
+    const others = current.alternatives.filter(
+      (a) => !(a.tripType === alternative.tripType && a.key === alternative.key),
+    );
+    const lines = savedLines({ ...current, alternatives: others });
     return {
       ...current,
-      alternatives: [
-        ...current.alternatives.filter((a) => !(a.tripType === alternative.tripType && a.key === alternative.key)),
-        toAlternative(alternative),
+      alternatives: [...others, withLines(toAlternative(alternative), lines)],
+      connections: [
+        ...current.connections,
+        ...connections.filter((c) => !known.has(c.key)).map((c) => withLines(c, lines)),
       ],
-      connections: [...current.connections, ...connections.filter((c) => !known.has(c.key))],
     };
   });
 }
 
 /**
- * Sets the lines of one leg of a saved alternative. Given a function, it is
- * applied to the lines as saved, so that quick changes in a row all count. A leg
- * keeps at least one line.
+ * Sets the lines of the stretch that one leg of a saved alternative rides. The
+ * change applies wherever that stretch is saved: in other alternatives, in
+ * connections and in the other trip type. Given a function, it is applied to
+ * the lines as saved, so that quick changes in a row all count. A stretch keeps
+ * at least one line.
  */
 export async function setLegLines(
   tripType: TripTypeId,
@@ -163,19 +208,16 @@ export async function setLegLines(
     return changed.length ? changed : current;
   };
   log.event('leg_lines_set', { tripType });
-  return update((current) => ({
-    ...current,
-    alternatives: current.alternatives.map((a) =>
-      a.tripType === tripType && a.key === key
-        ? {
-            ...a,
-            legs: a.legs.map((leg, i) =>
-              i === legIndex && leg.kind === 'transit' ? { ...leg, lines: next(leg.lines) } : leg,
-            ),
-          }
-        : a,
-    ),
-  }));
+  return update((current) => {
+    const leg = current.alternatives.find((a) => a.tripType === tripType && a.key === key)?.legs[legIndex];
+    if (leg?.kind !== 'transit') return current;
+    const changed = new Map([[walkKey(leg.from, leg.to), next(leg.lines)]]);
+    return {
+      ...current,
+      alternatives: current.alternatives.map((a) => withLines(a, changed)),
+      connections: current.connections.map((c) => withLines(c, changed)),
+    };
+  });
 }
 
 export async function removeAlternative(tripType: TripTypeId, key: string): Promise<SavedRoutes> {

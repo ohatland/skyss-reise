@@ -102,6 +102,9 @@ export default function LegScreen() {
             </Pressable>
           ))}
         </View>
+        <Text style={[styles.label, { color: theme.textMuted, marginTop: Spacing.two }]}>
+          Valget gjelder alle alternativer som bruker denne etappen.
+        </Text>
         {saveFailed && (
           <Text style={[styles.label, { color: theme.marginMissed }]}>Fikk ikke lagret. Prøv igjen.</Text>
         )}

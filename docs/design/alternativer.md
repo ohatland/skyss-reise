@@ -137,6 +137,9 @@ Laget 13. november 2026.
 - **Et egenbygd alternativ trenger ikke nå helt frem.** Siden appen kombinerer etapper selv, er også en delstrekning nyttig. Skjermen sier fra når kjeden ikke ender på den andre enden av reisen.
 - **Starter alternativet på en holdeplass ingen vei fra jobben fører til,** henter appen gangtiden dit fra Entur og lagrer den som forbindelse.
 - **Rutene på en etappe** endres ved å trykke på dem i alternativet. «Går også her» viser linjer Entur kjenner på strekningen. En etappe må ha minst én rute.
+- **Avgjort 14. november 2026: et linjevalg gjelder hele etappen.** Fjerner eller legger brukeren til en linje på en etappe, gjelder det alle lagrede alternativer og veier til og fra adressen som bruker samme etappe. Samme to holdeplasser i motsatt retning er en annen etappe og endres ikke.
+  - En ny kartlegging eller et alternativ bygget for hånd tar linjene som allerede er lagret på en etappe. En linje brukeren har fjernet, kommer dermed ikke tilbake av seg selv.
+  - Alternativer lagret før denne endringen kan ha ulike linjer på samme etappe. De rettes opp første gang etappen endres.
 - **Oppslaget av direkte ruter er et vanlig søk som filtreres etterpå.** `maximumTransfers: 0` virker ikke: Entur svarer da med å gå hele veien.
 - **Birkelandsskiftet har minst tre ID-er hos Entur:** `58537` fra holdeplassøket, `30168` for bussterminalen i reiser, og `30162` i gangsvaret. Derfor brukes alltid ID-ene fra reisesvarene i lagrede etapper.
 

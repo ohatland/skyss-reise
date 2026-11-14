@@ -243,3 +243,89 @@ describe('the other changes', () => {
     expect((await removeAlternative('fromWork', 'dolvik')).alternatives).toEqual([morning]);
   });
 });
+
+describe('lines belong to the stretch', () => {
+  const linesOf = (route: { legs: Leg[] }) => route.legs.map((leg) => (leg.kind === 'transit' ? leg.lines.join(', ') : 'walk'));
+  const viaMohlenprisFromGrana = alternative('grana-mohlenpris', [
+    ride('57', grana, birkelandsskiftet),
+    ride('50E', birkelandsskiftet, mohlenpris),
+    ride('400, 410', mohlenpris, krokasskiftet),
+  ]);
+  const toWork = alternative('to-work', [ride('400, 410', krokasskiftet, mohlenpris), ride('50E', mohlenpris, birkelandsskiftet)], 'toWork');
+  const busToBirkelandsskiftet = connection('bus', birkelandsskiftet, [
+    { kind: 'walk', from: work, to: grana, seconds: 224 },
+    ride('57', grana, birkelandsskiftet),
+  ]);
+
+  it('changes the lines wherever the stretch is saved: other alternatives and connections', async () => {
+    await seed({ alternatives: [viaMohlenpris, viaMohlenprisFromGrana, viaDolvik], connections: [busToBirkelandsskiftet] });
+
+    await setLegLines('fromWork', 'mohlenpris', 1, (lines) => lines.filter((l) => l !== '410'));
+    await setLegLines('fromWork', 'grana-mohlenpris', 0, ['56', '57']);
+
+    const saved = await readRoutes();
+    expect(saved.alternatives.map(linesOf)).toEqual([
+      ['50E', '400'],
+      ['56, 57', '50E', '400'],
+      ['51', '400'],
+    ]);
+    expect(linesOf(saved.connections[0])).toEqual(['walk', '56, 57']);
+  });
+
+  it('leaves the same stops ridden the other way alone', async () => {
+    await seed({ alternatives: [viaMohlenpris, toWork] });
+    await setLegLines('fromWork', 'mohlenpris', 1, ['400']);
+    const saved = await readRoutes();
+    expect(saved.alternatives.map(linesOf)).toEqual([
+      ['50E', '400'],
+      ['400, 410', '50E'],
+    ]);
+  });
+
+  it('changes nothing when the leg is a walk or the alternative is gone', async () => {
+    const withWalk = alternative('walk', [ride('1', birkelandsskiftet, dolvik), { kind: 'walk', from: dolvik, to: mohlenpris }]);
+    await seed({ alternatives: [withWalk] });
+    await setLegLines('fromWork', 'walk', 1, ['400']);
+    await setLegLines('fromWork', 'missing', 0, ['400']);
+    expect((await readRoutes()).alternatives).toEqual([withWalk]);
+  });
+
+  it('a mapping run cannot bring back a line the traveller removed from a stretch', async () => {
+    await seed({ alternatives: [viaMohlenpris] });
+    await setLegLines('fromWork', 'mohlenpris', 1, ['400']);
+
+    // The run finds a new alternative and a new connection on stretches that are saved already.
+    const newConnection = connection('new', mohlenpris, [ride('50E, 51', birkelandsskiftet, mohlenpris)]);
+    await saveMapping('fromWork', {
+      found: [viaMohlenpris, viaMohlenprisFromGrana],
+      chosen: ['mohlenpris', 'grana-mohlenpris'],
+      connections: [newConnection],
+      transferWalks: [],
+    });
+
+    const saved = await readRoutes();
+    expect(saved.alternatives.map(linesOf)).toEqual([
+      ['50E', '400'],
+      ['57', '50E', '400'],
+    ]);
+    expect(linesOf(saved.connections[0])).toEqual(['50E']);
+  });
+
+  it('an alternative built by hand takes the saved lines on a saved stretch, and its own on a new one', async () => {
+    await seed({ alternatives: [viaMohlenpris] });
+    await setLegLines('fromWork', 'mohlenpris', 1, ['400']);
+
+    const saved = await addAlternative(viaMohlenprisFromGrana, [busToBirkelandsskiftet]);
+
+    expect(linesOf(saved.alternatives[1])).toEqual(['57', '50E', '400']);
+    expect(linesOf(saved.connections[0])).toEqual(['walk', '57']);
+  });
+
+  it('an alternative saved again replaces its own lines', async () => {
+    await seed({ alternatives: [viaDolvik] });
+    const again = alternative('dolvik', [ride('50E, 51', birkelandsskiftet, dolvik), ride('400', dolvik, krokasskiftet)]);
+    const saved = await addAlternative(again);
+    expect(saved.alternatives.map(linesOf)).toEqual([['50E, 51', '400']]);
+  });
+});
+
