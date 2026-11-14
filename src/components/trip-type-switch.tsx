@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -8,13 +8,14 @@ import type { TripTypeId } from '@/model/types';
 interface Props {
   value: TripTypeId;
   onChange: (next: TripTypeId) => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** The switch between "Til jobb" and "Fra jobb" from the approved sketches. */
-export function TripTypeSwitch({ value, onChange }: Props) {
+export function TripTypeSwitch({ value, onChange, style }: Props) {
   const theme = useTheme();
   return (
-    <View style={[styles.segment, { backgroundColor: theme.cardHighlight }]}>
+    <View style={[styles.segment, { backgroundColor: theme.cardHighlight }, style]}>
       {(Object.keys(TRIP_TYPES) as TripTypeId[]).map((id) => {
         const active = id === value;
         return (

@@ -1,188 +1,163 @@
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { STOPS } from '@/config';
+import { TripCard } from '@/components/trip-card';
+import { TripTypeSwitch } from '@/components/trip-type-switch';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
-import { departureMarking } from '@/core/departure-marking';
+import { defaultTripType, labelsOnEveryCard } from '@/core/front-page';
 import { formatClock } from '@/core/time';
-import type { Departure } from '@/entur/departures';
-import { useDepartures } from '@/hooks/use-departures';
 import { useTheme } from '@/hooks/use-theme';
-import { loadRoutes } from '@/storage/alternatives';
+import { useTripPlan } from '@/hooks/use-trip-plan';
+import { TRIP_TYPES } from '@/model/places';
+import type { TripTypeId } from '@/model/types';
 
 /**
- * Phase 2 screen: a live departure board for Krokåsskiftet, to prove the path
- * from Entur to the phone. The front page from docs/design replaces it in phase 4.
+ * The front page, "Før avreise": one card per trip for the chosen trip type,
+ * the one that gets the traveller there first on top. See docs/design/for-avreise.md.
  */
-export default function DepartureBoardScreen() {
+export default function BeforeDepartureScreen() {
   const theme = useTheme();
-  const { board, loading, failed, refresh } = useDepartures(STOPS.krokasskiftet);
-  const [savedCount, setSavedCount] = useState(0);
+  // Chosen by the time of day until the position is used to choose it.
+  const [tripType, setTripType] = useState<TripTypeId>(() => defaultTripType(new Date()));
+  const [showHidden, setShowHidden] = useState(false);
+  const { plan, noRoutes, failed, loading, refresh } = useTripPlan(tripType);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadRoutes().then((routes) => setSavedCount(routes.alternatives.length));
-    }, []),
-  );
+  const shown = plan?.trips ?? [];
+  const hidden = plan?.hidden ?? [];
+  const cards = showHidden ? [...shown, ...hidden] : shown;
+  const everyCardLabelled = labelsOnEveryCard(cards);
+
+  const changeTripType = (next: TripTypeId) => {
+    setTripType(next);
+    setShowHidden(false);
+  };
+
+  const muted = [styles.body, { color: theme.textSecondary }];
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
-      <Text style={[styles.heading, { color: theme.text }]}>{board?.stopName ?? 'Krokåsskiftet'}</Text>
-
-      {failed && (
-        <View style={[styles.notice, { borderColor: theme.border }]}>
-          <Text style={{ color: theme.textSecondary, fontSize: FontSize.body }}>
-            {board ? 'Fikk ikke oppdatert fra Entur. Viser forrige svar.' : 'Fikk ikke kontakt med Entur.'}
-          </Text>
-          <Pressable onPress={refresh} accessibilityRole="button">
-            <Text style={{ color: theme.text, fontSize: FontSize.body, fontWeight: '500' }}>Prøv igjen</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {loading && !board && (
-        <Text style={{ color: theme.textMuted, fontSize: FontSize.body }}>Henter avganger…</Text>
-      )}
-
-      {board && board.departures.length === 0 && (
-        <Text style={{ color: theme.textSecondary, fontSize: FontSize.body }}>
-          Ingen avganger de neste to timene.
-        </Text>
-      )}
-
-      {board && (
-        <FlatList
-          style={styles.list}
-          data={board.departures}
-          keyExtractor={(d) => `${d.serviceJourneyId}-${d.aimedTime}`}
-          renderItem={({ item }) => <DepartureRow departure={item} />}
-          ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: theme.borderSoft }} />}
-        />
-      )}
-
-      <View style={[styles.footer, { borderTopColor: theme.borderSoft }]}>
-        <Text style={{ color: theme.textSecondary, fontSize: FontSize.body }}>
-          {savedCount === 0
-            ? 'Ingen lagrede alternativer'
-            : savedCount === 1
-              ? '1 lagret alternativ'
-              : `${savedCount} lagrede alternativer`}
-        </Text>
+      <View style={styles.top}>
+        <TripTypeSwitch value={tripType} onChange={changeTripType} style={styles.switch} />
         <Pressable
           onPress={() => router.push('/alternativer')}
           accessibilityRole="button"
+          accessibilityLabel="Innstillinger"
           style={[styles.button, { borderColor: theme.border }]}>
-          <Text style={{ color: theme.text, fontSize: FontSize.body }}>Alternativer</Text>
+          <SymbolView
+            name={{ ios: 'gearshape', android: 'settings', web: 'settings' }}
+            size={18}
+            tintColor={theme.text}
+            fallback={<Text style={{ color: theme.text, fontSize: 16 }}>⚙</Text>}
+          />
         </Pressable>
       </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {failed && plan && (
+          <Pressable onPress={refresh} accessibilityRole="button" style={styles.notice}>
+            <Text style={[styles.label, { color: theme.textMuted }]}>
+              Fikk ikke oppdatert fra Entur. Tallene er fra {formatClock(plan.at)}.
+            </Text>
+          </Pressable>
+        )}
+
+        {noRoutes && (
+          <View style={styles.empty}>
+            <Text style={muted}>
+              Ingen alternativer er lagret for {TRIP_TYPES[tripType].label.toLowerCase()}. Kjør en kartlegging for å
+              finne dem.
+            </Text>
+            <Pressable
+              onPress={() => router.push('/kartlegging')}
+              accessibilityRole="button"
+              style={[styles.button, styles.wide, { borderColor: theme.border }]}>
+              <Text style={[styles.body, { color: theme.text }]}>Kartlegg</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!noRoutes && !plan && loading && <Text style={[muted, styles.empty]}>Henter reiser…</Text>}
+
+        {!noRoutes && !plan && failed && (
+          <View style={styles.empty}>
+            <Text style={muted}>Fikk ikke kontakt med Entur.</Text>
+            <Pressable
+              onPress={refresh}
+              accessibilityRole="button"
+              style={[styles.button, styles.wide, { borderColor: theme.border }]}>
+              <Text style={[styles.body, { color: theme.text }]}>Prøv igjen</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!noRoutes && plan && shown.length === 0 && hidden.length === 0 && (
+          <Text style={[muted, styles.empty]}>Ingen reiser akkurat nå.</Text>
+        )}
+
+        {!noRoutes &&
+          shown.map((trip, index) => (
+            <TripCard
+              key={trip.cardKey}
+              trip={trip}
+              best={index === 0}
+              showLabels={index === 0 || everyCardLabelled}
+              showColumnHeadings={index === 0}
+            />
+          ))}
+
+        {/* The button stays where it is, so it marks where the hidden cards begin. */}
+        {!noRoutes && hidden.length > 0 && (
+          <Pressable
+            onPress={() => setShowHidden((value) => !value)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showHidden }}
+            style={[styles.button, styles.wide, styles.more, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>
+              {showHidden ? 'Vis færre' : `Vis flere (${hidden.length})`}
+            </Text>
+          </Pressable>
+        )}
+
+        {!noRoutes &&
+          showHidden &&
+          hidden.map((trip) => (
+            <TripCard
+              key={trip.cardKey}
+              trip={trip}
+              best={false}
+              showLabels={everyCardLabelled}
+              showColumnHeadings={false}
+            />
+          ))}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-function DepartureRow({ departure }: { departure: Departure }) {
-  const theme = useTheme();
-  const marking = departureMarking(departure);
-
-  return (
-    <View style={styles.row}>
-      <View style={styles.time}>
-        <Text
-          style={[
-            styles.clock,
-            { color: theme.text },
-            departure.cancelled && { textDecorationLine: 'line-through', color: theme.textMuted },
-          ]}>
-          {formatClock(departure.expectedTime)}
-        </Text>
-        {departure.cancelled ? (
-          <Text style={[styles.label, { color: theme.textMuted }]}>innstilt</Text>
-        ) : marking.kind === 'deviation' ? (
-          <Text style={[styles.struck, { color: theme.textMuted }]}>{marking.scheduledClock}</Text>
-        ) : (
-          <Text style={[styles.label, { color: theme.textMuted }]}>
-            {marking.kind === 'realtime' ? 'sanntid' : 'rutetid'}
-          </Text>
-        )}
-      </View>
-      <Text style={[styles.line, { color: theme.text }]}>{departure.line}</Text>
-      <Text style={[styles.destination, { color: theme.textSecondary }]} numberOfLines={1}>
-        {departure.destination}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-  },
-  heading: {
-    fontSize: FontSize.heading,
-    fontWeight: '500',
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.three,
-  },
-  notice: {
+  screen: { flex: 1 },
+  top: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: Spacing.three,
-    borderWidth: 1,
-    borderRadius: Radius.card,
-    padding: Spacing.three,
-    marginBottom: Spacing.three,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
     gap: Spacing.two,
-    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
   },
-  time: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    width: 124,
-  },
-  clock: {
-    fontSize: FontSize.time,
-    fontVariant: ['tabular-nums'],
-  },
-  label: {
-    fontSize: FontSize.label,
-  },
-  struck: {
-    fontSize: FontSize.body,
-    textDecorationLine: 'line-through',
-    fontVariant: ['tabular-nums'],
-  },
-  line: {
-    fontSize: FontSize.body,
-    fontWeight: '500',
-    width: 40,
-  },
-  destination: {
-    flex: 1,
-    fontSize: FontSize.body,
-  },
-  list: {
-    flex: 1,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
-    paddingVertical: Spacing.three,
-    borderTopWidth: 1,
-  },
+  switch: { flex: 1, marginBottom: 0 },
+  content: { paddingHorizontal: Spacing.four, paddingBottom: Spacing.five },
+  body: { fontSize: FontSize.body, lineHeight: 19 },
+  label: { fontSize: FontSize.label, lineHeight: 16 },
+  notice: { marginTop: Spacing.two },
+  empty: { marginTop: Spacing.four, gap: Spacing.three },
   button: {
     borderWidth: 1,
     borderRadius: Radius.control,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
   },
+  wide: { alignItems: 'center' },
+  more: { marginTop: Spacing.three },
 });

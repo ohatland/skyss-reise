@@ -72,3 +72,4 @@ Avgjort av brukeren etter at motoren var bygget og kjørt mot Entur. Motoren lig
 - **Typisk forsinkelse på null vises ikke.** Linjen «Typisk fremme N min senere» står ikke når Enturs median runder av til null minutter eller er negativ.
 - **Gange mellom to holdeplasser underveis er en egen rad:** «Gå», fra og til, og minutter, slik gangen til og fra jobben vises. Overgangstiden på neste rad har gangen regnet inn.
 - **Reisetid nå mot rutetid vises ikke på forsiden.** Motoren regner den ut (`durationSeconds` og `scheduledDurationSeconds`), og tallet beholdes til trafikkbildet i fase 6.
+- **Holdeplassnavn vises fullt ut,** slik Entur skriver dem («Birkelandsskiftet terminal, plattform D»), også når de går over to linjer og kortet blir høyere enn i skissen. Forkortingen uten «terminal» brukes ikke på forsiden.
