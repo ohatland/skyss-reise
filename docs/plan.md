@@ -164,7 +164,8 @@ Status 14. november 2026:
 
 - Gjort: motoren (`src/engine` og `src/entur/calls.ts`) med tester, kjørt mot Entur for begge reisetyper. Inngangen er `planTrips(tripType, now)`. Den gir ett kort per siste kjøretøy før veien mellom holdeplassen og adressen, sortert på ankomst dør til dør.
 - Avgjort samme dag: reglene for forsiden, blant annet hva «sanntid» betyr og hva som er ett kort. De står i `docs/design/for-avreise.md`.
-- Gjenstår: skjermen, og oppdatering hvert 30. sekund.
+- Gjort senere samme dag: forsiden (`src/app/index.tsx`, `src/components/trip-card.tsx`, `src/hooks/use-trip-plan.ts`) etter den godkjente skissen, med oppdatering hvert 30. sekund og «Vis flere». Prøvd i nettleser mot Entur for begge reisetyper.
+- Gjenstår: prøve på telefon og i rushtid med ekte forsinkelser. «Merk»-knappen og knappen som starter om bord-modus kommer med resten av fase 2 og fase 5.
 
 ### Fase 5: Om bord-modus
 
