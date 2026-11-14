@@ -69,6 +69,8 @@ export function findPaths(
     const last = path[path.length - 1];
     for (const leg of network.legs) {
       if (!continuesFrom(at, leg) || visited.has(leg.to.id)) continue;
+      // Changing to a linked stop of the same terminal must not lead back to one already passed.
+      if (leg.from.id !== at.id && visited.has(leg.from.id)) continue;
       if (leg.kind === 'walk' && (!last || last.kind === 'walk')) continue;
       if (leg.kind === 'transit' && vehicles === maxVehicles) continue;
       extend(

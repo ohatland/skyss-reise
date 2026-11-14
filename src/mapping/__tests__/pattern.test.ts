@@ -108,6 +108,42 @@ describe('toPattern', () => {
     expect(describeChain(p.legs)).toBe('Gå → 1 → Gå → 490 → 400');
   });
 
+  it('keeps a short walk from the work address as a leg, since it is the way to the first stop', () => {
+    const [p] = patterns(
+      [trip(70, [walk(null, 'grana', 120, 100), ride('57', 'grana', 'birkelandsskiftet'), ride('50E', 'birkelandsskiftet', 'krokasskiftet')])],
+      WORK,
+      HOME,
+    );
+    expect(p.legs[0]).toEqual({ kind: 'walk', from: { id: 'place:work', name: 'Jobb' }, to: stops.grana, seconds: 100 });
+  });
+
+  it('to work: treats a short walk from the home stop to a stop next to it as a platform change', () => {
+    const p = toPattern(
+      trip(70, [walk('krokasskiftet', 'kleppesto', 120), ride('403', 'kleppesto', 'dolvik'), walk('dolvik', null, 900)]),
+      HOME,
+      WORK,
+    );
+    expect(p && describeChain(p.legs)).toBe('403 → Gå');
+  });
+
+  it('home from work: treats a short walk to the home stop at the end as a platform change', () => {
+    const p = toPattern(
+      trip(70, [walkToBirkelandsskiftet, ride('50E', 'birkelandsskiftet', 'kleppesto'), walk('kleppesto', 'krokasskiftet', 120)]),
+      WORK,
+      HOME,
+    );
+    expect(p && describeChain(p.legs)).toBe('Gå → 50E');
+  });
+
+  it('leaves out a suggestion that walks a long way from or to the home stop, since it does not start or end there', () => {
+    expect(
+      toPattern(trip(80, [walk('krokasskiftet', 'kleppesto', 900), ride('403', 'kleppesto', 'dolvik'), walk('dolvik', null, 900)]), HOME, WORK),
+    ).toBeNull();
+    expect(
+      toPattern(trip(80, [walkToBirkelandsskiftet, ride('50E', 'birkelandsskiftet', 'kleppesto'), walk('kleppesto', 'krokasskiftet', 900)]), WORK, HOME),
+    ).toBeNull();
+  });
+
   it('returns null for a suggestion that is only walking', () => {
     expect(toPattern(trip(90, [walk(null, null, 6000)]), WORK, HOME)).toBeNull();
   });
@@ -197,6 +233,39 @@ describe('mergePatterns from an address', () => {
     expect(both.map((a) => describeConnections(a.connections, side, 'Jobb')).sort()).toEqual([
       'Fra jobb: gå 20 min · 57 fra Grana',
       'Fra jobb: gå 21 min · 57 fra Grana',
+    ]);
+  });
+
+  it('marks a route with more than three transfers as rare, even when it is fast', () => {
+    const many = mergePatterns(
+      patterns(
+        [
+          trip(60, [walkToBirkelandsskiftet, ride('50E', 'birkelandsskiftet', 'mohlenpris'), ride('400', 'mohlenpris', 'krokasskiftet')]),
+          trip(62, [
+            walkToBirkelandsskiftet,
+            ride('51', 'birkelandsskiftet', 'dolvik'),
+            ride('23', 'dolvik', 'storavatnet'),
+            ride('3', 'storavatnet', 'mohlenpris'),
+            ride('67', 'mohlenpris', 'kleppesto'),
+            ride('400', 'kleppesto', 'krokasskiftet'),
+          ]),
+          trip(61, [
+            walkToBirkelandsskiftet,
+            ride('51', 'birkelandsskiftet', 'dolvik'),
+            ride('23', 'dolvik', 'storavatnet'),
+            ride('67', 'storavatnet', 'kleppesto'),
+            ride('400', 'kleppesto', 'krokasskiftet'),
+          ]),
+        ],
+        WORK,
+        HOME,
+      ),
+      fromWork,
+    );
+    expect(many.map((a) => [a.transfers, a.rare])).toEqual([
+      [1, false],
+      [3, false],
+      [4, true],
     ]);
   });
 

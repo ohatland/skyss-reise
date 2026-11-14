@@ -138,11 +138,43 @@ export function formatWalkTime(seconds: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-/** Reads "4", "4:30" or "4.30" as minutes and seconds. Null when it is not a time. */
+/**
+ * Reads "4", "4:30" or "4.30" as minutes and seconds, and "4,5" or "4.5" as
+ * decimal minutes. Null when it is not a time.
+ */
 export function parseWalkTime(text: string): number | null {
-  const match = /^\s*(\d{1,3})(?:[:.,](\d{1,2}))?\s*$/.exec(text);
+  const match = /^\s*(\d{1,3})(?:([:.,])(\d{1,2}))?\s*$/.exec(text);
   if (!match) return null;
-  const seconds = match[2] ? Number(match[2]) : 0;
+  const [, minutes, separator, after] = match;
+  if (!after) return Number(minutes) * 60;
+  if (after.length === 1) return separator === ':' ? null : Number(minutes) * 60 + Number(after) * 6;
+  const seconds = Number(after);
   if (seconds > 59) return null;
-  return Number(match[1]) * 60 + seconds;
+  return Number(minutes) * 60 + seconds;
+}
+
+/** The text a walking time field starts with: the time counted on, or empty when none is known. */
+export function walkTimeText(walk: Walk): string {
+  const known = walk.ownSeconds !== null || walk.enturSeconds !== null;
+  return known ? formatWalkTime(effectiveSeconds(walk)) : '';
+}
+
+export type WalkTimeChange =
+  | { kind: 'unchanged' }
+  | { kind: 'clear' }
+  | { kind: 'set'; seconds: number }
+  | { kind: 'invalid' };
+
+/**
+ * What to save when the traveller leaves a walking time field. Leaving it as it
+ * was saves nothing, so that Entur's estimate is not taken for the traveller's own.
+ */
+export function walkTimeChange(walk: Walk, draft: string): WalkTimeChange {
+  const text = draft.trim();
+  if (text === walkTimeText(walk)) return { kind: 'unchanged' };
+  if (text === '') return walk.ownSeconds === null ? { kind: 'unchanged' } : { kind: 'clear' };
+  const seconds = parseWalkTime(text);
+  if (seconds === null) return { kind: 'invalid' };
+  if (seconds === walk.ownSeconds) return { kind: 'unchanged' };
+  return { kind: 'set', seconds };
 }

@@ -106,13 +106,23 @@ describe('buildTripQuery', () => {
 });
 
 describe('dominantLines', () => {
-  it('ranks lines by use but ignores the last vehicle of each trip', () => {
+  it('home from work: ranks lines by use but spares the last vehicle, which ends at the home stop', () => {
     const patterns = [
       { lineIds: ['SKY:Line:50E', 'SKY:Line:400'] },
       { lineIds: ['SKY:Line:50E', 'SKY:Line:410'] },
       { lineIds: ['SKY:Line:51', 'SKY:Line:23', 'SKY:Line:400'] },
     ] as never;
-    expect(dominantLines(patterns, 2)).toEqual(['SKY:Line:50E', 'SKY:Line:23']);
+    expect(dominantLines(patterns, 2, TRIP_TYPES.fromWork)).toEqual(['SKY:Line:50E', 'SKY:Line:23']);
+  });
+
+  it('to work: spares the first vehicle, which leaves from the home stop', () => {
+    const patterns = [
+      { lineIds: ['SKY:Line:400', 'SKY:Line:23', 'SKY:Line:50E'] },
+      { lineIds: ['SKY:Line:400', 'SKY:Line:23E', 'SKY:Line:51'] },
+      { lineIds: ['SKY:Line:410', 'SKY:Line:50E'] },
+      { lineIds: ['SKY:Line:400', 'SKY:Line:51'] },
+    ] as never;
+    expect(dominantLines(patterns, 2, TRIP_TYPES.toWork)).toEqual(['SKY:Line:50E', 'SKY:Line:51']);
   });
 });
 
@@ -136,10 +146,11 @@ describe('runMapping', () => {
       onProgress: (done, total) => progress.push([done, total]),
     });
 
+    // At most 14; one pass is skipped, since only 50E can be searched without.
     expect(totalSearches(config)).toBe(14);
-    expect(calls).toHaveLength(14);
-    expect(result.searches).toBe(14);
-    expect(progress[progress.length - 1]).toEqual([14, 14]);
+    expect(calls).toHaveLength(12);
+    expect(result.searches).toBe(12);
+    expect(progress[progress.length - 1]).toEqual([12, 12]);
     expect(calls.every((c) => c.from === WORK && c.to === HOME)).toBe(true);
     expect(new Set(calls.map((c) => c.dateTime))).toEqual(
       new Set(['2026-11-16T15:00:00+01:00', '2026-11-16T15:20:00+01:00']),
@@ -147,6 +158,78 @@ describe('runMapping', () => {
     expect(calls.filter((c) => c.viaStopPlaceId).map((c) => c.viaStopPlaceId)).toEqual(
       expect.arrayContaining(DEFAULT_VIA_STOPS.map((s) => s.id)),
     );
+  });
+
+  it('bans the dominant lines cumulatively: one in the first pass, two in the second', async () => {
+    const calls: TripSearchParams[] = [];
+    const result = await runMapping(config, {
+      search: async (params) => {
+        calls.push(params);
+        return [trip(60, [leg('50E', B, M), leg('400', M, K)]), trip(65, [leg('51', B, S), leg('400', S, K)])];
+      },
+    });
+
+    expect(result.bannedLines).toEqual(['SKY:Line:50E', 'SKY:Line:51']);
+    expect(calls.filter((c) => c.bannedLines).map((c) => c.bannedLines)).toEqual([
+      ['SKY:Line:50E'],
+      ['SKY:Line:50E'],
+      ['SKY:Line:50E', 'SKY:Line:51'],
+      ['SKY:Line:50E', 'SKY:Line:51'],
+    ]);
+  });
+
+  it('to work: bans the lines further on, never the bus from the home stop', async () => {
+    const calls: TripSearchParams[] = [];
+    await runMapping(
+      { ...config, tripType: TRIP_TYPES.toWork, viaStops: [] },
+      {
+        search: async (params) => {
+          calls.push(params);
+          return [trip(60, [leg('400', K, M), leg('50E', M, B)]), trip(65, [leg('400', K, S), leg('51', S, B)])];
+        },
+      },
+    );
+
+    const banned = calls.flatMap((c) => c.bannedLines ?? []);
+    expect(banned).not.toContain('SKY:Line:400');
+    expect(new Set(banned)).toEqual(new Set(['SKY:Line:50E', 'SKY:Line:51']));
+  });
+
+  it('skips a pass that would repeat a search, and counts only the searches made', async () => {
+    const calls: TripSearchParams[] = [];
+    const progress: [number, number][] = [];
+    const result = await runMapping(
+      { ...config, viaStops: [] },
+      {
+        // Every trip is direct, so there is no line to search without.
+        search: async (params) => {
+          calls.push(params);
+          return [trip(60, [leg('400', B, K)])];
+        },
+        onProgress: (done, total) => progress.push([done, total]),
+      },
+    );
+
+    expect(calls).toHaveLength(6);
+    expect(calls.some((c) => c.bannedLines)).toBe(false);
+    expect(result.searches).toBe(6);
+    expect(progress[progress.length - 1]).toEqual([6, 6]);
+  });
+
+  it('runs no more searches at once than the limit', async () => {
+    let running = 0;
+    let most = 0;
+    await runMapping(config, {
+      concurrency: 2,
+      search: async () => {
+        running++;
+        most = Math.max(most, running);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        running--;
+        return [trip(60, [leg('50E', B, M), leg('400', M, K)])];
+      },
+    });
+    expect(most).toBe(2);
   });
 
   it('searches again without the line that dominated the first passes', async () => {
@@ -170,7 +253,7 @@ describe('runMapping', () => {
       },
     });
 
-    expect(result.failedSearches).toBe(7);
+    expect(result.failedSearches).toBe(result.searches / 2);
     expect(result.alternatives).toHaveLength(1);
   });
 

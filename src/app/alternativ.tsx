@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { leave, ScreenHeader } from '@/components/screen-header';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { log } from '@/logging/logger';
 import { describeChain } from '@/mapping/describe';
 import { anchorOf, shortStopName } from '@/mapping/pattern';
 import { TRIP_TYPES } from '@/model/places';
@@ -14,24 +15,22 @@ import {
   connectionWalks,
   effectiveSeconds,
   formatWalkTime,
-  parseWalkTime,
   platformLabel,
   vehicleRows,
+  walkTimeChange,
+  walkTimeText,
   type Walk,
 } from '@/model/walks';
-import {
-  loadRoutes,
-  NO_ROUTES,
-  removeAlternative,
-  setWalkOverride,
-  type SavedRoutes,
-} from '@/storage/alternatives';
+import { loadRoutes, removeAlternative, setWalkOverride, type SavedRoutes } from '@/storage/alternatives';
 
 /** One saved alternative: its vehicles, and the walking time before each. */
 export default function AlternativeScreen() {
   const theme = useTheme();
   const params = useLocalSearchParams<{ tripType: TripTypeId; key: string }>();
-  const [routes, setRoutes] = useState<SavedRoutes>(NO_ROUTES);
+  /** Null until storage has been read. */
+  const [routes, setRoutes] = useState<SavedRoutes | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -41,13 +40,27 @@ export default function AlternativeScreen() {
 
   const tripType = TRIP_TYPES[params.tripType] ?? TRIP_TYPES.fromWork;
   const side = placeSide(tripType);
-  const alternative = routes.alternatives.find(
+  const alternative = routes?.alternatives.find(
     (a) => a.tripType === tripType.id && a.key === params.key,
   );
 
   const setOwnTime = useCallback(async (walk: Walk, seconds: number | null) => {
-    setRoutes(await setWalkOverride(walk.key, seconds));
+    try {
+      setFailed(null);
+      setRoutes(await setWalkOverride(walk.key, seconds));
+    } catch (error) {
+      log.error(error, { where: 'set_walk_time' });
+      setFailed('Fikk ikke lagret gangtiden. Prøv igjen.');
+    }
   }, []);
+
+  if (!routes) {
+    return (
+      <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
+        <ScreenHeader title="Alternativ" />
+      </SafeAreaView>
+    );
+  }
 
   if (!alternative) {
     return (
@@ -132,11 +145,22 @@ export default function AlternativeScreen() {
           </>
         )}
 
+        {failed && <Text style={[styles.label, { color: theme.marginMissed, marginTop: Spacing.two }]}>{failed}</Text>}
+
         <Pressable
           onPress={async () => {
-            await removeAlternative(tripType.id, alternative.key);
-            leave();
+            if (removing) return;
+            setRemoving(true);
+            try {
+              await removeAlternative(tripType.id, alternative.key);
+              leave();
+            } catch (error) {
+              log.error(error, { where: 'remove_alternative' });
+              setFailed('Fikk ikke slettet alternativet. Prøv igjen.');
+              setRemoving(false);
+            }
           }}
+          disabled={removing}
           accessibilityRole="button"
           style={styles.remove}>
           <Text style={[styles.body, { color: theme.marginMissed }]}>Slett alternativ</Text>
@@ -159,16 +183,13 @@ function WalkTimeField({ walk, onChange }: WalkTimeFieldProps) {
 
   const commit = () => {
     if (draft === null) return;
-    if (draft.trim() === '') {
-      onChange(walk, null);
-    } else {
-      const seconds = parseWalkTime(draft);
-      if (seconds === null) {
-        setInvalid(true);
-        return;
-      }
-      onChange(walk, seconds);
+    const change = walkTimeChange(walk, draft);
+    if (change.kind === 'invalid') {
+      setInvalid(true);
+      return;
     }
+    if (change.kind === 'clear') onChange(walk, null);
+    if (change.kind === 'set') onChange(walk, change.seconds);
     setDraft(null);
     setInvalid(false);
   };
@@ -202,7 +223,7 @@ function WalkTimeField({ walk, onChange }: WalkTimeFieldProps) {
   const known = walk.ownSeconds !== null || walk.enturSeconds !== null;
   return (
     <Pressable
-      onPress={() => setDraft(known ? formatWalkTime(effectiveSeconds(walk)) : '')}
+      onPress={() => setDraft(walkTimeText(walk))}
       accessibilityRole="button"
       accessibilityLabel={`Endre gangtid ${walk.from.name} til ${walk.to.name}`}
       hitSlop={8}

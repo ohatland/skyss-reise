@@ -110,6 +110,37 @@ describe('findPaths', () => {
     expect(findPaths(buildNetwork(network.legs.map((leg) => [leg])), [dolvik], byparken)).toEqual([]);
   });
 
+  it('never starts with a walk', () => {
+    const network = buildNetwork([[walk(byparken, strandkaien), ride('490', strandkaien, kleppesto)]]);
+    expect(findPaths(network, [byparken], kleppesto)).toEqual([]);
+  });
+
+  it('never follows a walk with another walk', () => {
+    const network = buildNetwork([
+      [ride('1', birkelandsskiftet, byparken), walk(byparken, sandslivegen), walk(sandslivegen, strandkaien), ride('490', strandkaien, kleppesto)],
+    ]);
+    expect(findPaths(network, [birkelandsskiftet], kleppesto)).toEqual([]);
+  });
+
+  it('never comes back to a stop through the link to another stop of its terminal', () => {
+    const link: TransferWalk = {
+      key: 'q:buss>q:bane',
+      from: { id: 'q:buss', platform: null, stop: birkelandsskiftet },
+      to: { id: 'q:bane', platform: null, stop: bybanestopp },
+      fromLines: ['3'],
+      toLines: ['4'],
+      seconds: 75,
+    };
+    const network = buildNetwork(
+      [
+        [ride('1', dolvik, bybanestopp), ride('2', bybanestopp, storavatnet), ride('3', storavatnet, birkelandsskiftet)],
+        [ride('4', bybanestopp, byparken)],
+      ],
+      [link],
+    );
+    expect(chains(findPaths(network, [dolvik], byparken))).toEqual(['1 → 4']);
+  });
+
   it('never passes the same stop twice', () => {
     const network = buildNetwork([
       [ride('400', krokasskiftet, storavatnet), ride('23', storavatnet, dolvik)],

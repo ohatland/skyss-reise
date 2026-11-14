@@ -18,8 +18,10 @@ const asPlace = (stop: StopRef): Place => ({ id: stop.id, name: stop.name, stopP
 
 /**
  * The direct ride between two stops, with every line that makes it, or null when
- * there is none. The stops in the result are the ones Entur uses in trips, which
- * can differ from the ones searched for where a terminal has several stop places.
+ * Entur answered every search and none has one. Throws when nothing was found and
+ * a search went unanswered, since that search may have been the one to find it.
+ * The stops in the result are the ones Entur uses in trips, which can differ from
+ * the ones searched for where a terminal has several stop places.
  *
  * The search is an ordinary one, filtered afterwards. Asking Entur for at most
  * zero transfers does not work: it then answers with walking the whole way.
@@ -28,13 +30,11 @@ export async function findDirectLeg(from: StopRef, to: StopRef, deps: DirectDeps
   const origin = asPlace(from);
   const destination = asPlace(to);
 
-  const answers = await Promise.all(
-    SAMPLE_TIMES.map((time) =>
-      deps
-        .search({ from: origin, to: destination, dateTime: osloIso(deps.date, time) })
-        .catch(() => [] as TripPatternResponse[]),
-    ),
+  const settled = await Promise.allSettled(
+    SAMPLE_TIMES.map((time) => deps.search({ from: origin, to: destination, dateTime: osloIso(deps.date, time) })),
   );
+  const answers = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
+  const failure = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
 
   const rides = new Map<string, TransitLeg[]>();
   for (const trip of answers.flat()) {
@@ -43,7 +43,10 @@ export async function findDirectLeg(from: StopRef, to: StopRef, deps: DirectDeps
     const key = `${legs[0].from.id}>${legs[0].to.id}`;
     rides.set(key, [...(rides.get(key) ?? []), legs[0]]);
   }
-  if (rides.size === 0) return null;
+  if (rides.size === 0) {
+    if (failure) throw failure.reason;
+    return null;
+  }
 
   const [mostCommon] = [...rides.values()].sort((a, b) => b.length - a.length);
   return { ...mostCommon[0], lines: sortLines(mostCommon.flatMap((leg) => leg.lines)) };

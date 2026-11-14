@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,8 +17,6 @@ import { extendWithVia, runMapping, totalSearches, type MappingResult } from '@/
 import { TRIP_TYPES } from '@/model/places';
 import {
   placeSide,
-  type Alternative,
-  type Connection,
   type MappedAlternative,
   type PlaceSide,
   type StopRef,
@@ -50,6 +48,8 @@ export default function MappingScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showRare, setShowRare] = useState(false);
   const [addingVia, setAddingVia] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const tripType = TRIP_TYPES[tripTypeId];
   const times = useMemo(
@@ -57,9 +57,12 @@ export default function MappingScreen() {
     [settings.start, settings.end],
   );
 
-  useEffect(() => {
-    loadRoutes().then(setSaved);
-  }, []);
+  // Read again on return from building an alternative, so that it counts as saved.
+  useFocusEffect(
+    useCallback(() => {
+      loadRoutes().then(setSaved);
+    }, []),
+  );
 
   useEffect(() => {
     setSettings(defaultSettings(tripTypeId));
@@ -69,7 +72,7 @@ export default function MappingScreen() {
   const changeSettings = useCallback(
     (next: MappingSettings) => {
       setSettings(next);
-      void saveMappingSettings(tripTypeId, next);
+      saveMappingSettings(tripTypeId, next).catch((error) => log.error(error, { where: 'saveMappingSettings' }));
     },
     [tripTypeId],
   );
@@ -142,19 +145,25 @@ export default function MappingScreen() {
 
   const save = useCallback(
     async ({ alternatives: found, transferWalks }: MappingResult) => {
-      // Alternatives saved earlier that this run did not find are kept, with their connections.
-      const foundKeys = new Set(found.map((a) => a.key));
-      const keptAlternatives: Alternative[] = saved.alternatives.filter(
-        (a) => a.tripType === tripTypeId && !foundKeys.has(a.key),
-      );
-      const chosen = found.filter((a) => selected.has(a.key));
-      const connections = new Map<string, Connection>();
-      for (const c of saved.connections) if (c.tripType === tripTypeId) connections.set(c.key, c);
-      for (const c of connectionsFor(chosen)) connections.set(c.key, c);
-      await saveMapping(tripTypeId, [...keptAlternatives, ...chosen], [...connections.values()], transferWalks);
-      leave();
+      if (saving) return;
+      setSaving(true);
+      setSaveFailed(false);
+      try {
+        // What is saved now is read again when saving, so nothing added meanwhile is lost.
+        await saveMapping(tripTypeId, {
+          found,
+          chosen: selected,
+          connections: connectionsFor(found.filter((a) => selected.has(a.key))),
+          transferWalks,
+        });
+        leave();
+      } catch (error) {
+        log.error(error, { where: 'save_mapping' });
+        setSaveFailed(true);
+        setSaving(false);
+      }
     },
-    [saved, selected, tripTypeId],
+    [saving, selected, tripTypeId],
   );
 
   const secondary = { color: theme.textSecondary };
@@ -248,7 +257,7 @@ export default function MappingScreen() {
             <Text style={[styles.primaryText, { color: theme.background }]}>Start kartlegging</Text>
           </Pressable>
           <Text style={[styles.label, styles.center, { color: theme.textMuted }]}>
-            {totalSearches({ times, viaStops: settings.viaStops })} søk hos Entur. Tar omtrent ett minutt.
+            Opptil {totalSearches({ times, viaStops: settings.viaStops })} søk hos Entur. Tar omtrent ett minutt.
           </Text>
         </ScrollView>
       )}
@@ -297,6 +306,8 @@ export default function MappingScreen() {
           onSearchVia={(stop) => searchVia(phase.result, stop)}
           onBuild={() => router.push({ pathname: '/bygg', params: { tripType: tripTypeId } })}
           onSave={() => save(phase.result)}
+          saving={saving}
+          saveFailed={saveFailed}
         />
       )}
     </SafeAreaView>
@@ -356,6 +367,8 @@ interface ResultsProps {
   onSearchVia: (stop: StopRef) => void;
   onBuild: () => void;
   onSave: () => void;
+  saving: boolean;
+  saveFailed: boolean;
 }
 
 function Results({
@@ -371,12 +384,16 @@ function Results({
   onSearchVia,
   onBuild,
   onSave,
+  saving,
+  saveFailed,
 }: ResultsProps) {
   const theme = useTheme();
   const [searchingVia, setSearchingVia] = useState(false);
   const common = result.alternatives.filter((a) => !a.rare);
   const rare = result.alternatives.filter((a) => a.rare);
   const groups = groupAlternatives(common);
+  // A search via a stop can give an alternative a new key, so only keys still in the list count.
+  const selectedCount = result.alternatives.filter((a) => selected.has(a.key)).length;
 
   const row = (alternative: MappedAlternative) => {
     const checked = selected.has(alternative.key);
@@ -491,11 +508,19 @@ function Results({
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.borderSoft, backgroundColor: theme.background }]}>
+        {saveFailed && (
+          <Text style={[styles.label, styles.center, { color: theme.marginMissed, marginBottom: Spacing.two }]}>
+            Fikk ikke lagret. Prøv igjen.
+          </Text>
+        )}
         <Pressable
           onPress={onSave}
+          disabled={saving}
           accessibilityRole="button"
-          style={[styles.primary, { backgroundColor: theme.text, marginTop: 0 }]}>
-          <Text style={[styles.primaryText, { color: theme.background }]}>Lagre {selected.size} valgte</Text>
+          style={[styles.primary, { backgroundColor: saving ? theme.textMuted : theme.text, marginTop: 0 }]}>
+          <Text style={[styles.primaryText, { color: theme.background }]}>
+            {saving ? 'Lagrer …' : `Lagre ${selectedCount} valgte`}
+          </Text>
         </Pressable>
       </View>
     </>

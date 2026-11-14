@@ -66,6 +66,23 @@ describe('findDirectLeg', () => {
     expect(found?.to).toEqual(mohlenpris);
   });
 
+  it('finds the ride when Entur first walks from the stop searched for to the one it uses', async () => {
+    const shortWalk: TripLegResponse = {
+      mode: 'foot',
+      distance: 80,
+      duration: 70,
+      line: null,
+      fromPlace: at(searchedBirkelandsskiftet),
+      toPlace: at(busStop),
+    };
+    const found = await findDirectLeg(
+      searchedBirkelandsskiftet,
+      mohlenpris,
+      deps(async () => [trip([shortWalk, ride('50E', busStop, mohlenpris)])]),
+    );
+    expect(found).toMatchObject({ from: busStop, to: mohlenpris, lines: ['50E'] });
+  });
+
   it('ignores suggestions that change vehicle on the way', async () => {
     const found = await findDirectLeg(
       searchedBirkelandsskiftet,
@@ -86,6 +103,32 @@ describe('findDirectLeg', () => {
       }),
     );
     expect(found?.lines).toEqual(['50E']);
+  });
+});
+
+describe('findDirectLeg when Entur does not answer', () => {
+  it('fails rather than reporting no direct ride when every search fails', async () => {
+    await expect(
+      findDirectLeg(searchedBirkelandsskiftet, mohlenpris, deps(async () => Promise.reject(new Error('nettverksfeil')))),
+    ).rejects.toThrow('nettverksfeil');
+  });
+
+  it('fails when nothing was found and some searches went unanswered, since those may have found it', async () => {
+    let n = 0;
+    await expect(
+      findDirectLeg(
+        searchedBirkelandsskiftet,
+        mohlenpris,
+        deps(async () => {
+          if (n++ === 0) throw new Error('nettverksfeil');
+          return [];
+        }),
+      ),
+    ).rejects.toThrow('nettverksfeil');
+  });
+
+  it('reports no direct ride only when every search answered', async () => {
+    expect(await findDirectLeg(searchedBirkelandsskiftet, mohlenpris, deps(async () => []))).toBeNull();
   });
 });
 

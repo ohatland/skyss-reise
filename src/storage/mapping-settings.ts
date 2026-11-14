@@ -20,20 +20,29 @@ export function defaultSettings(tripType: TripTypeId): MappingSettings {
 
 type Stored = Partial<Record<TripTypeId, MappingSettings>>;
 
-async function loadAll(): Promise<Stored> {
+/** Throws when storage cannot be read, so that a save never writes over the other trip type's settings. */
+async function readAll(): Promise<Stored> {
+  const stored = await AsyncStorage.getItem(STORAGE_KEY);
+  return stored ? (JSON.parse(stored) as Stored) : {};
+}
+
+/** The saved settings, or the defaults where none are saved or storage cannot be read. */
+export async function loadMappingSettings(tripType: TripTypeId): Promise<MappingSettings> {
   try {
-    const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as Stored) : {};
+    return { ...defaultSettings(tripType), ...(await readAll())[tripType] };
   } catch (error) {
     log.error(error, { where: 'loadMappingSettings' });
-    return {};
+    return defaultSettings(tripType);
   }
 }
 
-export async function loadMappingSettings(tripType: TripTypeId): Promise<MappingSettings> {
-  return { ...defaultSettings(tripType), ...(await loadAll())[tripType] };
-}
+let pending: Promise<unknown> = Promise.resolve();
 
-export async function saveMappingSettings(tripType: TripTypeId, settings: MappingSettings): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...(await loadAll()), [tripType]: settings }));
+/** Saves the settings of one trip type. Saves run one at a time, in the order they were made. */
+export function saveMappingSettings(tripType: TripTypeId, settings: MappingSettings): Promise<void> {
+  const run = pending.then(async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...(await readAll()), [tripType]: settings }));
+  });
+  pending = run.catch(() => undefined);
+  return run;
 }

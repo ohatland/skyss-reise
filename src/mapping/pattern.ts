@@ -44,7 +44,11 @@ export function chainKey(legs: Leg[]): string {
   return legs.map((leg) => `${leg.kind === 'walk' ? 'w' : 't'}:${leg.from.id}>${leg.to.id}`).join('|');
 }
 
-/** Reduces a suggestion to its pattern, or null when it has no transit leg at all. */
+/**
+ * Reduces a suggestion to its pattern. Null when it has no transit leg at all, or
+ * when it walks a long way from or to an end of the trip that is a stop: the trip
+ * then does not start or end at that stop, which the rest of the app relies on.
+ */
 export function toPattern(trip: TripPatternResponse, from: Place, to: Place): TripPattern | null {
   const origin = placeRef(from);
   const destination = placeRef(to);
@@ -61,7 +65,9 @@ export function toPattern(trip: TripPatternResponse, from: Place, to: Place): Tr
     if (!start || !end) return;
 
     if (leg.mode === 'foot') {
-      const touchesPlace = start.id === origin.id || end.id === destination.id;
+      // Only an address is reached on foot as part of the trip; at a stop, a short walk is a platform change.
+      const touchesPlace =
+        (!from.stopPlaceId && start.id === origin.id) || (!to.stopPlaceId && end.id === destination.id);
       const betweenStops = leg.distance > MIN_WALK_LEG_METERS;
       if (start.id !== end.id && (touchesPlace || betweenStops)) {
         legs.push({ kind: 'walk', from: start, to: end, seconds: leg.duration });
@@ -99,6 +105,8 @@ export function toPattern(trip: TripPatternResponse, from: Place, to: Place): Tr
   });
 
   if (!legs.some((leg) => leg.kind === 'transit')) return null;
+  if (from.stopPlaceId && legs[0].kind === 'walk') return null;
+  if (to.stopPlaceId && legs[legs.length - 1].kind === 'walk') return null;
 
   return { key: chainKey(legs), legs, lineIds, durationSeconds: trip.duration, transfers };
 }

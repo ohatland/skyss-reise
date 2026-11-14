@@ -9,6 +9,7 @@ import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { nextWeekday } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
 import { log } from '@/logging/logger';
+import { appendLeg } from '@/mapping/build';
 import { findDirectLeg, findWalkSeconds } from '@/mapping/direct';
 import { anchorOf, chainKey, shortStopName } from '@/mapping/pattern';
 import { searchTrips } from '@/mapping/query';
@@ -56,14 +57,15 @@ export default function BuildScreen() {
           setMessage(`Entur fant ingen direkte rute fra ${shortStopName(start.name)} til ${shortStopName(to.name)}.`);
           return;
         }
-        setLegs([...legs, leg]);
+        setLegs((current) => appendLeg(current, leg));
       } else {
         const seconds = await findWalkSeconds(asPlace(start), asPlace(to), deps);
         if (seconds === null) {
           setMessage(`Entur fant ingen gangvei fra ${shortStopName(start.name)} til ${shortStopName(to.name)}.`);
           return;
         }
-        setLegs([...legs, { kind: 'walk', from: start, to, seconds }]);
+        // The walk ends at the stop as searched for; appendLeg moves it to Entur's stop when the next ride is found.
+        setLegs((current) => appendLeg(current, { kind: 'walk', from: start, to, seconds }));
       }
       setFrom(null);
       setTo(null);
@@ -139,14 +141,17 @@ export default function BuildScreen() {
             ))}
             <Pressable
               onPress={() => {
-                setLegs(legs.slice(0, -1));
+                setLegs((current) => current.slice(0, -1));
                 setFrom(null);
                 setTo(null);
                 setMessage(null);
               }}
+              disabled={busy}
               accessibilityRole="button"
               style={styles.undo}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>Fjern siste etappe</Text>
+              <Text style={[styles.label, { color: busy ? theme.textMuted : theme.textSecondary }]}>
+                Fjern siste etappe
+              </Text>
             </Pressable>
           </View>
         )}
@@ -158,7 +163,7 @@ export default function BuildScreen() {
         <View style={[styles.field, { borderBottomColor: theme.borderSoft }]}>
           <Text style={[styles.body, { color: theme.textSecondary }]}>Fra</Text>
           {start ? (
-            <Pressable onPress={() => setFrom(null)} disabled={!from} accessibilityRole="button">
+            <Pressable onPress={() => setFrom(null)} disabled={!from || busy} accessibilityRole="button">
               <Text style={[styles.body, { color: theme.text }]}>
                 {shortStopName(start.name)}
                 {from ? ' ×' : ''}
@@ -171,7 +176,11 @@ export default function BuildScreen() {
         <View style={[styles.field, { borderBottomColor: theme.borderSoft }]}>
           <Text style={[styles.body, { color: theme.textSecondary }]}>Til</Text>
           {to ? (
-            <Pressable onPress={() => setTo(null)} accessibilityRole="button" accessibilityLabel="Velg en annen holdeplass">
+            <Pressable
+              onPress={() => setTo(null)}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Velg en annen holdeplass">
               <Text style={[styles.body, { color: theme.text }]}>{shortStopName(to.name)} ×</Text>
             </Pressable>
           ) : null}

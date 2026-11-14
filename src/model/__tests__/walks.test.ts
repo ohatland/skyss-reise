@@ -9,6 +9,8 @@ import {
   parseWalkTime,
   platformLabel,
   vehicleRows,
+  walkTimeChange,
+  type Walk,
   type WalkTimes,
 } from '@/model/walks';
 
@@ -81,6 +83,17 @@ describe('vehicleRows', () => {
     expect(platformLabel(to400.walks[0])).toBe('annen plattform');
   });
 
+  it('counts only the transfers seen from the lines of the leg before', () => {
+    const inbound = quay(mohlenpris, 'q:mot-sentrum');
+    const outbound = quay(mohlenpris, 'q:fra-sentrum');
+    const times: WalkTimes = {
+      transferWalks: [transfer(inbound, outbound, 152, ['50E'], ['400']), transfer(outbound, outbound, 0, ['3'], ['400'])],
+      overrides: {},
+    };
+    const [, to400] = vehicleRows([ride('50E', birkelandsskiftet, mohlenpris), ride('400', mohlenpris, krokasskiftet)], times);
+    expect(to400.walks.map((w) => w.key)).toEqual(['q:mot-sentrum>q:fra-sentrum']);
+  });
+
   it('names the platforms where a terminal has several ways between two legs', () => {
     const rows = vehicleRows([ride('400', krokasskiftet, busstasjonen), ride('600', busstasjonen, lagunen)], {
       transferWalks: [
@@ -149,8 +162,53 @@ describe('walking time text', () => {
     expect(parseWalkTime(text)).toBe(seconds);
   });
 
-  it.each(['', 'fire', '4:75', '4:3:0', '-2'])('rejects %s', (text) => {
+  it.each([
+    ['4,5', 270],
+    ['4.5', 270],
+    ['0,5', 30],
+  ] as const)('reads %s as decimal minutes', (text, seconds) => {
+    expect(parseWalkTime(text)).toBe(seconds);
+  });
+
+  it.each(['', 'fire', '4:75', '4:3:0', '-2', '4:5'])('rejects %s', (text) => {
     expect(parseWalkTime(text)).toBeNull();
+  });
+});
+
+describe('walkTimeChange', () => {
+  const walk = (enturSeconds: number | null, ownSeconds: number | null): Walk => ({
+    key: 'q:a>q:b',
+    from: mohlenpris,
+    to: mohlenpris,
+    fromPlatform: null,
+    toPlatform: null,
+    samePlatform: false,
+    enturSeconds,
+    ownSeconds,
+  });
+
+  it("saves nothing when the field is opened and left as it was, so Entur's estimate stays Entur's", () => {
+    expect(walkTimeChange(walk(152, null), '2:32')).toEqual({ kind: 'unchanged' });
+    expect(walkTimeChange(walk(152, null), ' 2:32 ')).toEqual({ kind: 'unchanged' });
+    expect(walkTimeChange(walk(null, null), '')).toEqual({ kind: 'unchanged' });
+  });
+
+  it("saves nothing when the traveller's own time is written again", () => {
+    expect(walkTimeChange(walk(152, 30), '0:30')).toEqual({ kind: 'unchanged' });
+  });
+
+  it('saves a time the traveller changed', () => {
+    expect(walkTimeChange(walk(152, null), '0:30')).toEqual({ kind: 'set', seconds: 30 });
+    expect(walkTimeChange(walk(152, 30), '1')).toEqual({ kind: 'set', seconds: 60 });
+  });
+
+  it("clears the traveller's own time when the field is emptied", () => {
+    expect(walkTimeChange(walk(152, 30), '')).toEqual({ kind: 'clear' });
+    expect(walkTimeChange(walk(152, null), '')).toEqual({ kind: 'unchanged' });
+  });
+
+  it('marks text that is not a time', () => {
+    expect(walkTimeChange(walk(152, null), 'fire')).toEqual({ kind: 'invalid' });
   });
 });
 
@@ -214,6 +272,18 @@ describe('transfer walks from a mapping run', () => {
       bus('490', at(strandkaien), at(kleppestoKai)),
     ]);
     expect(p.transfers).toEqual([]);
+  });
+
+  it('collects the lines seen on both sides of a transfer', () => {
+    const seen = (from: string, to: string) =>
+      pattern([
+        foot(at(null), at(birkelandsskiftet), 1467, 1212),
+        bus(from, at(birkelandsskiftet), at(mohlenpris, 'q:mot-sentrum')),
+        bus(to, at(mohlenpris, 'q:fra-sentrum'), at(krokasskiftet)),
+      ]);
+    expect(mergeTransferWalks([seen('50E', '400'), seen('53', '410')])).toMatchObject([
+      { key: 'q:mot-sentrum>q:fra-sentrum', fromLines: ['50E', '53'], toLines: ['400', '410'] },
+    ]);
   });
 
   it('takes the median where the same transfer was seen several times', () => {

@@ -46,13 +46,18 @@ const BASE_VARIANTS: Variant[] = [
 const BANNED_LINE_PASSES = 2;
 
 /**
- * The lines that dominate the suggestions so far, most used first. The last
- * vehicle of a trip is left out: it is usually the only way to the destination.
+ * The lines that dominate the suggestions so far, most used first. The vehicle
+ * at an end of the trip that is a stop, not an address, is left out: every trip
+ * shares that stop, and the line serving it is usually the only way there.
+ * Home from work that is the last vehicle; to work, the first.
  */
-export function dominantLines(patterns: TripPattern[], count: number): string[] {
+export function dominantLines(patterns: TripPattern[], count: number, tripType: TripType): string[] {
+  const spareFirst = Boolean(tripType.from.stopPlaceId);
+  const spareLast = Boolean(tripType.to.stopPlaceId);
   const uses = new Map<string, number>();
   for (const pattern of patterns) {
-    for (const lineId of pattern.lineIds.slice(0, -1)) {
+    const ids = pattern.lineIds;
+    for (const lineId of ids.slice(spareFirst ? 1 : 0, spareLast ? -1 : ids.length)) {
       uses.set(lineId, (uses.get(lineId) ?? 0) + 1);
     }
   }
@@ -62,6 +67,7 @@ export function dominantLines(patterns: TripPattern[], count: number): string[] 
     .map(([lineId]) => lineId);
 }
 
+/** The most searches a run makes. A pass that would repeat another is skipped, so it can be fewer. */
 export function totalSearches(config: Pick<MappingConfig, 'times' | 'viaStops'>): number {
   return config.times.length * (BASE_VARIANTS.length + BANNED_LINE_PASSES + config.viaStops.length);
 }
@@ -84,7 +90,7 @@ async function inParallel<T>(tasks: (() => Promise<T>)[], concurrency: number): 
  */
 export async function runMapping(config: MappingConfig, deps: MappingDeps): Promise<MappingResult> {
   const { tripType, date, times, viaStops } = config;
-  const total = totalSearches(config);
+  let total = totalSearches(config);
   const patterns: TripPattern[] = [];
   let done = 0;
   let failed = 0;
@@ -115,10 +121,11 @@ export async function runMapping(config: MappingConfig, deps: MappingDeps): Prom
 
   await runPass(BASE_VARIANTS);
 
-  const banned = dominantLines(patterns, BANNED_LINE_PASSES);
-  await runPass(
-    Array.from({ length: BANNED_LINE_PASSES }, (_, i) => ({ bannedLines: banned.slice(0, i + 1) })),
-  );
+  // With fewer dominant lines than passes, the passes left would repeat a search already made.
+  const banned = dominantLines(patterns, BANNED_LINE_PASSES, tripType);
+  total -= (BANNED_LINE_PASSES - banned.length) * times.length;
+  deps.onProgress?.(done, total);
+  await runPass(banned.map((_, i) => ({ bannedLines: banned.slice(0, i + 1) })));
 
   await runPass(viaStops.map((stop) => ({ viaStopPlaceId: stop.id })));
 

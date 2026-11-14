@@ -7,18 +7,21 @@ import { leave, ScreenHeader } from '@/components/screen-header';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { nextWeekday } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
+import { log } from '@/logging/logger';
 import { findDirectLeg } from '@/mapping/direct';
-import { shortStopName, sortLines } from '@/mapping/pattern';
+import { shortStopName } from '@/mapping/pattern';
 import { searchTrips } from '@/mapping/query';
 import { TRIP_TYPES } from '@/model/places';
 import type { TripTypeId } from '@/model/types';
-import { loadRoutes, NO_ROUTES, setLegLines, type SavedRoutes } from '@/storage/alternatives';
+import { loadRoutes, setLegLines, type SavedRoutes } from '@/storage/alternatives';
 
 /** One leg of a saved alternative: which lines the traveller is willing to take on it. */
 export default function LegScreen() {
   const theme = useTheme();
   const params = useLocalSearchParams<{ tripType: TripTypeId; key: string; leg: string }>();
-  const [routes, setRoutes] = useState<SavedRoutes>(NO_ROUTES);
+  /** Null until storage has been read. */
+  const [routes, setRoutes] = useState<SavedRoutes | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   /** Lines Entur knows on this stretch. Null while looking, or when the lookup failed. */
   const [known, setKnown] = useState<string[] | null>(null);
   const [lookedUp, setLookedUp] = useState(false);
@@ -31,7 +34,7 @@ export default function LegScreen() {
 
   const tripType = TRIP_TYPES[params.tripType] ?? TRIP_TYPES.fromWork;
   const legIndex = Number(params.leg);
-  const alternative = routes.alternatives.find((a) => a.tripType === tripType.id && a.key === params.key);
+  const alternative = routes?.alternatives.find((a) => a.tripType === tripType.id && a.key === params.key);
   const leg = alternative?.legs[legIndex];
   const transit = leg?.kind === 'transit' ? leg : null;
   const fromId = transit?.from.id;
@@ -60,13 +63,21 @@ export default function LegScreen() {
     return (
       <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
         <ScreenHeader title="Etappe" />
-        <Text style={[styles.body, styles.padded, { color: theme.textSecondary }]}>Fant ikke etappen.</Text>
+        {routes && (
+          <Text style={[styles.body, styles.padded, { color: theme.textSecondary }]}>Fant ikke etappen.</Text>
+        )}
       </SafeAreaView>
     );
   }
 
-  const setLines = async (lines: string[]) => {
-    setRoutes(await setLegLines(tripType.id, alternative.key, legIndex, sortLines(lines)));
+  const setLines = async (change: (lines: string[]) => string[]) => {
+    try {
+      setSaveFailed(false);
+      setRoutes(await setLegLines(tripType.id, alternative.key, legIndex, change));
+    } catch (error) {
+      log.error(error, { where: 'set_leg_lines' });
+      setSaveFailed(true);
+    }
   };
   const others = (known ?? []).filter((line) => !transit.lines.includes(line));
 
@@ -79,7 +90,7 @@ export default function LegScreen() {
           {transit.lines.map((line) => (
             <Pressable
               key={line}
-              onPress={() => setLines(transit.lines.filter((l) => l !== line))}
+              onPress={() => setLines((lines) => lines.filter((l) => l !== line))}
               disabled={transit.lines.length === 1}
               accessibilityRole="button"
               accessibilityLabel={`Fjern linje ${line}`}
@@ -91,6 +102,9 @@ export default function LegScreen() {
             </Pressable>
           ))}
         </View>
+        {saveFailed && (
+          <Text style={[styles.label, { color: theme.marginMissed }]}>Fikk ikke lagret. Prøv igjen.</Text>
+        )}
         {transit.lines.length === 1 && (
           <Text style={[styles.label, { color: theme.textMuted }]}>En etappe må ha minst én rute.</Text>
         )}
@@ -109,7 +123,7 @@ export default function LegScreen() {
           {others.map((line) => (
             <Pressable
               key={line}
-              onPress={() => setLines([...transit.lines, line])}
+              onPress={() => setLines((lines) => [...lines, line])}
               accessibilityRole="button"
               accessibilityLabel={`Legg til linje ${line}`}
               style={[styles.chip, { borderColor: theme.border }]}>
