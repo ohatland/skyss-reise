@@ -1,9 +1,8 @@
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 
 import { REFRESH_INTERVAL_MS } from '@/config';
 import { planTrips, type TripPlan } from '@/engine/plan';
+import { useActive } from '@/hooks/use-active';
 import type { TransferMemory } from '@/engine/transfers';
 import { log } from '@/logging/logger';
 import type { TripTypeId } from '@/model/types';
@@ -25,26 +24,6 @@ export interface TripPlanState extends Known {
   /** True until the first answer, or failure, for this trip type has arrived. */
   loading: boolean;
   refresh: () => void;
-}
-
-/** True while the screen is focused and the app is in the foreground. */
-function useActive(): boolean {
-  const [focused, setFocused] = useState(false);
-  const [foreground, setForeground] = useState(AppState.currentState !== 'background');
-
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true);
-      return () => setFocused(false);
-    }, []),
-  );
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => setForeground(state === 'active'));
-    return () => subscription.remove();
-  }, []);
-
-  return focused && foreground;
 }
 
 /**

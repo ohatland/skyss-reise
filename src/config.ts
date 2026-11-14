@@ -23,3 +23,6 @@ export const STOPS = {
 
 /** How often status screens refetch from Entur. */
 export const REFRESH_INTERVAL_MS = 30_000;
+
+/** How often the on-board screen looks at Entur: margins move faster with the traveller under way. */
+export const ON_BOARD_REFRESH_INTERVAL_MS = 20_000;

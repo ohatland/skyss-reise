@@ -2,7 +2,7 @@ import type { PlanDeps } from '@/engine/plan';
 import type { PlannedTrip, RideRow } from '@/engine/trips';
 import type { StopRef, TripTypeId } from '@/model/types';
 import { followVehicle, type OnBoardPlan, type PlanMemory } from '@/onboard/follow';
-import type { FollowedVehicle, Following, VehicleRef } from '@/onboard/vehicle';
+import type { FollowedVehicle, Following, VehicleRef, VehicleStop } from '@/onboard/vehicle';
 
 /** The vehicle the traveller says they have boarded, and where: what a trip on board starts from. */
 export interface Boarded extends VehicleRef {
@@ -251,4 +251,60 @@ export async function refresh(
 ): Promise<{ session: OnBoardSession; plan: OnBoardPlan; question: Question | null }> {
   const plan = await followVehicle(session.tripType, session.following, now, { ...deps, memory: session.memory });
   return { plan, ...afterLook(session, plan) };
+}
+
+/**
+ * Where the vehicle is as far as the app can tell: the last stop after the one
+ * boarded at that it has come to, whether it stands there or has gone on.
+ * That is where a traveller who says they have got off is taken to have done
+ * so. Null when it has come to none yet.
+ */
+export function stopVehicleIsAt(vehicle: FollowedVehicle, now: Date): VehicleStop | null {
+  const moment = now.getTime();
+  const first = vehicle.boarding ? 1 : 0;
+  for (let index = vehicle.route.length - 1; index >= first; index--) {
+    const stop = vehicle.route[index];
+    if (stop.cancelled) continue;
+    if (stop.passed || stop.arrival.actual || (!vehicle.live && ms(stop.arrival.expected) <= moment)) return stop;
+  }
+  return null;
+}
+
+/**
+ * "Jeg har gått av": the traveller says, unasked, that they have got off where
+ * the vehicle is, which need not be where the plan has them change. They then
+ * wait there, and the ways on are those from that stop. Kept as an answer of
+ * theirs to "Gikk du av på {holdeplass}?", so that the trip log has it as any
+ * other. What the plan told before no longer stands, so nothing is asked about
+ * it; the plan from the stop tells what comes next.
+ *
+ * Null when the vehicle has come to no stop since the traveller boarded.
+ */
+export function gotOffHere(
+  session: OnBoardSession,
+  vehicle: FollowedVehicle,
+  now: Date,
+): { session: OnBoardSession; answer: Answer } | null {
+  const stop = stopVehicleIsAt(vehicle, now);
+  if (!stop) return null;
+  const given: Answer = {
+    question: { kind: 'gotOff', stop: stop.stop, platform: stop.platform },
+    yes: true,
+    source: 'traveller',
+    at: now.toISOString(),
+  };
+  const { stayedOnAt, ...following } = session.following;
+  // Having said they stayed on at the stop, they have now got off there after all.
+  const before = stayedOnAt === stop.stop.id ? { ...session, following } : session;
+  const after = answer({ ...before, expected: null }, given);
+  return { session: after, answer: given };
+}
+
+/**
+ * True when the trip is over: the traveller has got off where the plan has no
+ * vehicle on, at the stop where the trip ends or where it goes on on foot.
+ */
+export function tripIsOver(session: OnBoardSession): boolean {
+  const { expected, following } = session;
+  return Boolean(following.gotOffAt) && expected !== null && expected.next === null && expected.alightAt.id === following.gotOffAt;
 }

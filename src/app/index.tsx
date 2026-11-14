@@ -7,12 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { TripCard } from '@/components/trip-card';
 import { TripTypeSwitch } from '@/components/trip-type-switch';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
-import { defaultTripType, labelsOnEveryCard } from '@/core/front-page';
+import { boardButtonText, defaultTripType, labelsOnEveryCard } from '@/core/front-page';
+import { boardingOf } from '@/core/on-board';
 import { formatClock } from '@/core/time';
+import type { PlannedTrip } from '@/engine/trips';
 import { useTheme } from '@/hooks/use-theme';
 import { useTripPlan } from '@/hooks/use-trip-plan';
 import { TRIP_TYPES } from '@/model/places';
 import type { TripTypeId } from '@/model/types';
+import { onBoardStore } from '@/onboard/store';
 
 /**
  * The front page, "Før avreise": one card per trip for the chosen trip type,
@@ -36,6 +39,16 @@ export default function BeforeDepartureScreen() {
   };
 
   const muted = [styles.body, { color: theme.textSecondary }];
+
+  /** The traveller is on the first vehicle of this card: on board starts. */
+  const board = (trip: PlannedTrip) => {
+    const boarding = boardingOf(trip);
+    if (!boarding) return;
+    onBoardStore.start(tripType, boarding);
+    router.push('/om-bord');
+  };
+  const top = noRoutes ? undefined : shown[0];
+  const topButton = top ? boardButtonText(top) : null;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -99,13 +112,14 @@ export default function BeforeDepartureScreen() {
 
         {!noRoutes &&
           shown.map((trip, index) => (
-            <TripCard
-              key={trip.cardKey}
-              trip={trip}
-              best={index === 0}
-              showLabels={index === 0 || everyCardLabelled}
-              showColumnHeadings={index === 0}
-            />
+            <Pressable key={trip.cardKey} onPress={() => board(trip)} accessibilityRole="button" accessibilityHint={boardButtonText(trip) ?? undefined}>
+              <TripCard
+                trip={trip}
+                best={index === 0}
+                showLabels={index === 0 || everyCardLabelled}
+                showColumnHeadings={index === 0}
+              />
+            </Pressable>
           ))}
 
         {/* The button stays where it is, so it marks where the hidden cards begin. */}
@@ -124,15 +138,22 @@ export default function BeforeDepartureScreen() {
         {!noRoutes &&
           showHidden &&
           hidden.map((trip) => (
-            <TripCard
-              key={trip.cardKey}
-              trip={trip}
-              best={false}
-              showLabels={everyCardLabelled}
-              showColumnHeadings={false}
-            />
+            <Pressable key={trip.cardKey} onPress={() => board(trip)} accessibilityRole="button" accessibilityHint={boardButtonText(trip) ?? undefined}>
+              <TripCard trip={trip} best={false} showLabels={everyCardLabelled} showColumnHeadings={false} />
+            </Pressable>
           ))}
       </ScrollView>
+
+      {top && topButton && (
+        <View style={styles.bar}>
+          <Pressable
+            onPress={() => board(top)}
+            accessibilityRole="button"
+            style={[styles.button, styles.wide, styles.grow, { borderColor: theme.border }]}>
+            <Text style={[styles.body, { color: theme.text }]}>{topButton}</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -160,4 +181,6 @@ const styles = StyleSheet.create({
   },
   wide: { alignItems: 'center' },
   more: { marginTop: Spacing.three },
+  grow: { flex: 1 },
+  bar: { flexDirection: 'row', paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
 });

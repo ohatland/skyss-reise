@@ -92,3 +92,12 @@ export function missedTransferText(trip: PlannedTrip): string | null {
 export function rowKey(row: TripRow, index: number): string {
   return row.kind === 'ride' ? `${row.serviceJourneyId}|${row.from.id}` : `walk|${row.from.id}|${row.to.id}|${index}`;
 }
+
+/**
+ * The button that starts on board for a card: "Jeg er på 400 fra 07:09", the
+ * line of the card's first vehicle and when it leaves. Null for a trip without one.
+ */
+export function boardButtonText(trip: PlannedTrip): string | null {
+  const ride = firstRide(trip);
+  return ride ? `Jeg er på ${ride.line} fra ${formatClock(ride.departure.expected)}` : null;
+}

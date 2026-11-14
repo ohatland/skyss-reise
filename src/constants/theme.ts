@@ -18,6 +18,9 @@ export const Colors = {
     marginGood: '#15803d',
     marginTight: '#a16207',
     marginMissed: '#dc2626',
+    askBackground: '#e6f1fb',
+    askBorder: '#85b7eb',
+    askText: '#0c447c',
   },
   dark: {
     background: '#262624',
@@ -30,6 +33,9 @@ export const Colors = {
     marginGood: '#97c459',
     marginTight: '#ef9f27',
     marginMissed: '#f09595',
+    askBackground: '#0c447c',
+    askBorder: '#185fa5',
+    askText: '#e6f1fb',
   },
 } as const;
 

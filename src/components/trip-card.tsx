@@ -13,6 +13,7 @@ import {
   walkMinutes,
   walkText,
 } from '@/core/front-page';
+import { arrivalLabel, rowsOnBoard } from '@/core/on-board';
 import { formatClock } from '@/core/time';
 import { formatMargin, type MarginStatus } from '@/core/transfer';
 import type { PlannedTrip, RideRow, TripRow } from '@/engine/trips';
@@ -28,22 +29,63 @@ interface Props {
   showLabels: boolean;
   /** "Rute", "Holdeplass" and "Overgangstid" above the table. */
   showColumnHeadings: boolean;
+  /**
+   * On board, as in docs/design/om-bord.html: only the arrival, large, with
+   * "Fremme …" above it, and the rows after the vehicle the traveller is on.
+   */
+  onBoard?: boolean;
 }
 
-/** One trip before departure, laid out as in docs/design/for-avreise.html. */
-export function TripCard({ trip, best, showLabels, showColumnHeadings }: Props) {
+/** One trip, laid out as in docs/design/for-avreise.html, or on board as in docs/design/om-bord.html. */
+export function TripCard({ trip, best, showLabels, showColumnHeadings, onBoard = false }: Props) {
   const theme = useTheme();
-  const labels = cardLabels(trip);
   const walking = startsWalking(trip);
   const first = firstRide(trip);
-  const typical = typicalDelayText(trip);
+  const typical = onBoard ? null : typicalDelayText(trip);
   const missed = missedTransferText(trip);
+  const rows = onBoard ? rowsOnBoard(trip) : trip.rows;
 
   return (
     <View
       style={[styles.card, { borderColor: theme.border }, best && { backgroundColor: theme.cardHighlight }]}
       accessible
-      accessibilityLabel={describe(trip)}>
+      accessibilityLabel={onBoard ? describeOnBoard(trip) : describe(trip)}>
+      {onBoard ? (
+        <>
+          {showLabels && <Text style={[styles.label, { color: theme.textMuted }]}>{arrivalLabel(trip)}</Text>}
+          <Text style={[styles.time, styles.arrival, { color: theme.text }]}>{formatClock(trip.arrival)}</Text>
+        </>
+      ) : (
+        <BeforeDepartureTimes trip={trip} showLabels={showLabels} theme={theme} />
+      )}
+
+      {rows.length > 0 && (
+        <View style={[styles.table, { borderTopColor: theme.borderSoft }]}>
+          {showColumnHeadings && (
+            <View style={styles.row}>
+              <Text style={[styles.label, styles.route, { color: theme.textMuted }]}>Rute</Text>
+              <Text style={[styles.label, styles.stop, { color: theme.textMuted }]}>Holdeplass</Text>
+              <Text style={[styles.label, styles.right, { color: theme.textMuted }]}>Overgangstid</Text>
+            </View>
+          )}
+          {rows.map((row, index) => (
+            <Row key={rowKey(row, index)} row={row} departureUnder={!onBoard && walking && row === first} theme={theme} />
+          ))}
+        </View>
+      )}
+
+      {missed && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{missed}</Text>}
+      {typical && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{typical}</Text>}
+    </View>
+  );
+}
+
+/** The two large times before departure: the start on the left, the arrival on the right. */
+function BeforeDepartureTimes({ trip, showLabels, theme }: { trip: PlannedTrip; showLabels: boolean; theme: ThemeValues }) {
+  const labels = cardLabels(trip);
+  const walking = startsWalking(trip);
+  return (
+    <>
       {showLabels && (
         <View style={styles.spread}>
           <Text style={[styles.label, { color: theme.textMuted }]}>{labels.start}</Text>
@@ -61,23 +103,7 @@ export function TripCard({ trip, best, showLabels, showColumnHeadings }: Props) 
         )}
         <Text style={[styles.time, styles.arrival, { color: theme.text }]}>{formatClock(trip.arrival)}</Text>
       </View>
-
-      <View style={[styles.table, { borderTopColor: theme.borderSoft }]}>
-        {showColumnHeadings && (
-          <View style={styles.row}>
-            <Text style={[styles.label, styles.route, { color: theme.textMuted }]}>Rute</Text>
-            <Text style={[styles.label, styles.stop, { color: theme.textMuted }]}>Holdeplass</Text>
-            <Text style={[styles.label, styles.right, { color: theme.textMuted }]}>Overgangstid</Text>
-          </View>
-        )}
-        {trip.rows.map((row, index) => (
-          <Row key={rowKey(row, index)} row={row} departureUnder={walking && row === first} theme={theme} />
-        ))}
-      </View>
-
-      {missed && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{missed}</Text>}
-      {typical && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{typical}</Text>}
-    </View>
+    </>
   );
 }
 
@@ -166,6 +192,15 @@ function describe(trip: PlannedTrip): string {
     );
   const missed = missedTransferText(trip);
   return [`${start} ${startTime}`, `${end} ${formatClock(trip.arrival)}`, ...rides, ...(missed ? [missed] : [])].join('. ');
+}
+
+/** The same on board: the arrival, and the changes after the vehicle the traveller is on. */
+function describeOnBoard(trip: PlannedTrip): string {
+  const rides = rowsOnBoard(trip)
+    .filter((row): row is RideRow => row.kind === 'ride')
+    .map((row) => `${row.line} fra ${boardingText(row)}${row.transfer ? `, overgangstid ${formatMargin(row.transfer.marginSeconds)}` : ''}`);
+  const missed = missedTransferText(trip);
+  return [`${arrivalLabel(trip)} ${formatClock(trip.arrival)}`, ...rides, ...(missed ? [missed] : [])].join('. ');
 }
 
 const styles = StyleSheet.create({

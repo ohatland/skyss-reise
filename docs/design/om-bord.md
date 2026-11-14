@@ -134,8 +134,27 @@ Skissen ble lagt fram for brukeren 14. november 2026 med fire forslag. Svaret: �
 - **«Vis flere ({antall})»** står under kortene når det finnes kort som er fremme mer enn 30 minutter etter planen.
 - **Om bord startes fra forsiden** slik det ble bekreftet 13. november 2026, se [for-avreise.md](for-avreise.md): knappen nederst («Jeg er på 400 fra 07:09») gjelder det øverste kortet, og et trykk på et annet kort starter om bord for den bussen.
 
+### Skjermen slik den er bygget
+
+Bygget 14. november 2026 etter skissen og reglene over (`src/app/om-bord.tsx`, tekstene i `src/core/on-board.ts`, økten i `src/onboard/store.ts`). Punktene under er valg gjort under byggingen. *Ingen av dem er godkjent av brukeren ennå.*
+
+- **Oppdatering hvert 20. sekund** mens skjermen er åpen og appen er i forgrunnen (`ON_BOARD_REFRESH_INTERVAL_MS`). Forsiden oppdaterer fortsatt hvert 30. sekund. Etter et svar eller «Jeg har gått av» oppdateres det med en gang.
+- **Knappene nederst står fast nederst på skjermen,** både «Jeg er på …» på forsiden og «Jeg har gått av» om bord. De ruller ikke med kortene.
+- **Hele kortet kan trykkes på forsiden,** også det øverste, som da gjør det samme som knappen.
+- **Kortene om bord kan ikke trykkes.** Det er ingen funksjon for å følge et annet kort enn planen, se over.
+- **Holdeplassen for «Jeg har gått av»** er den siste holdeplassen etter påstigning som kjøretøyet har kommet til, enten det står der eller har kjørt videre. For et kjøretøy uten sanntid går det etter tiden. Det lagres som et ja fra brukeren på «Gikk du av på {holdeplass}?», og det planen sa om bytte før, gjelder ikke lenger.
+- **«Jeg har gått av» er nedtonet og gjør ingenting** før kjøretøyet har kommet til en holdeplass etter påstigning, og står ikke på skjermen mens brukeren venter på en holdeplass.
+- **Reisen er over** når brukeren har gått av der planen ikke har noe kjøretøy videre: der reisen ender, eller der det bare er gange igjen. Appen går da tilbake til forsiden. Det gjelder også når det skjer med «Jeg har gått av».
+- **Overskriften og spørsmålene har ikke plattform** («Du venter på Møhlenpris», «Gikk du av på Møhlenpris?»), slik skissen viser. Plattformen står i kortene.
+- **«Typisk fremme N min senere» står ikke om bord.** Skissen har den ikke.
+- **Spørsmålsfeltet har de blå fargene fra skissen,** lagt i temaet (`askBackground`, `askBorder`, `askText`).
+- **Feil mot Entur** vises som på forsiden: «Fikk ikke oppdatert fra Entur. Tallene er fra HH:MM.» Et trykk på linjen prøver igjen.
+- **Økten og turloggen ligger bare i minnet** så lenge appen er åpen. Lastes appen på nytt, er de borte, og skjermen går til forsiden.
+- **Går brukeren av på en holdeplass som ikke er med i de lagrede alternativene,** har appen ingen reiser videre derfra. Avgjort av brukeren 14. november 2026 da skjermen ble bygget, med svaret «Avslutt-knapp»: skjermen sier «Ingen lagrede reiser videre fra {holdeplass}.» og har knappen «Avslutt reisen», som avslutter reisen og går tilbake til forsiden. Reservesøk hos Entur kommer senere. *Ordlyden i teksten og på knappen er min.*
+- **Går brukeren tilbake til forsiden** (tilbakeknapp eller sveip), ligger økten fortsatt i minnet, men forsiden har ingen vei tilbake til den. Et nytt trykk på et kort starter en ny reise.
+
 ### Ikke avgjort
 
-- **«Jeg har gått av» på en holdeplass som ikke er med i de lagrede alternativene.** Appen har da ingen reiser videre derfra. Avgjøres når skjermen bygges.
+- **Veien tilbake til om bord fra forsiden** når brukeren har gått tilbake midt i en reise.
 - **Hvor turrapporten lagres.**
 
