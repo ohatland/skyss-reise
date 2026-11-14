@@ -1,0 +1,573 @@
+import { departureMarking, type DepartureMarking } from '@/core/departure-marking';
+import { marginStatus, transferMarginSeconds, type MarginStatus } from '@/core/transfer';
+import type { TypicalDelay } from '@/entur/calls';
+import type { TripPath } from '@/engine/paths';
+import { isLive, isPrecise, type Ride, type RideEnd } from '@/engine/rides';
+import { walkKey, type Leg, type StopRef, type TransferWalk, type TransitLeg, type WalkLeg } from '@/model/types';
+import { effectiveSeconds, type Walk } from '@/model/walks';
+
+/** What is known about walking times: Entur's estimates at transfers and the traveller's own times. */
+export interface WalkTimes {
+  transferWalks: TransferWalk[];
+  /** The traveller's own times in seconds, by walk key. */
+  walkOverrides: Record<string, number>;
+}
+
+/** A time at a stop: the timetable, Entur's forecast, and Entur's real-time flag as given. */
+export interface TimeAtStop {
+  aimed: string;
+  expected: string;
+  /** Set by Entur also for vehicles that have not started. What to show is in the marking. */
+  realtime: boolean;
+}
+
+/** A walk shown as a row of its own. */
+export interface WalkRow {
+  kind: 'walk';
+  /** From the address to the first stop, from the last stop to the address, or between two stops on the way. */
+  position: 'start' | 'between' | 'end';
+  from: StopRef;
+  to: StopRef;
+  seconds: number;
+}
+
+/** How a change of vehicle looks with the forecasts as they are. */
+export interface Transfer {
+  /** Transfer time: what is left after walking when the next vehicle leaves. Negative when the forecast says it is missed. */
+  marginSeconds: number;
+  status: MarginStatus;
+  /** The walking time counted on: the traveller's own, otherwise Entur's, otherwise none. */
+  walkSeconds: number;
+  /**
+   * When the traveller is there if this departure is missed and the next one
+   * that the forecast says is caught is taken instead. Null when there is none.
+   */
+  arrivalIfMissed: string | null;
+}
+
+/** One vehicle the traveller rides, from where they board to where they get off. */
+export interface RideRow {
+  kind: 'ride';
+  line: string;
+  mode: string;
+  destination: string;
+  serviceJourneyId: string;
+  date: string;
+  from: StopRef;
+  fromPlatform: string | null;
+  to: StopRef;
+  toPlatform: string | null;
+  departure: TimeAtStop;
+  arrival: TimeAtStop;
+  /**
+   * The small marking beside the departure time. Real time only for a vehicle
+   * that is under way. One that has not started is on the timetable, whatever
+   * Entur's flag says, or deviates from it where Entur expects another time.
+   */
+  marking: DepartureMarking;
+  /** True once the vehicle has left the first stop of its journey. */
+  started: boolean;
+  /** No live forecast, but light rail or boat, whose timetable is taken as exact. */
+  precise: boolean;
+  predictionInaccurate: boolean;
+  /** Entur's typical delay for this vehicle where the traveller boards and gets off. */
+  typicalDelay: { departure: TypicalDelay | null; arrival: TypicalDelay | null };
+  /** The change from the previous vehicle. Null for the first vehicle. */
+  transfer: Transfer | null;
+}
+
+export type TripRow = WalkRow | RideRow;
+
+/** One concrete trip: these vehicles, boarded and left at these stops, with the walking around them. */
+export interface PlannedTrip {
+  /** Identifies the trip by its vehicles and where they are boarded and left. */
+  id: string;
+  /**
+   * Identifies the card the trip belongs to: its last vehicle, leaving out the
+   * vehicles of the way between a stop near the address and the address.
+   */
+  cardKey: string;
+  /** Every walk and vehicle in order. */
+  rows: TripRow[];
+  /** Where the trip starts and ends: the address where the traveller walks to or from it, otherwise the stop. */
+  from: StopRef;
+  to: StopRef;
+  /** When the traveller must leave the address to catch the first vehicle. Null when the trip starts at a stop. */
+  leaveAt: string | null;
+  /** The first vehicle's departure, with its marking. */
+  departure: TimeAtStop;
+  departureMarking: DepartureMarking;
+  /** When the traveller is there, door to door: the last vehicle's arrival and any walk after it. */
+  arrival: string;
+  /** Whether the arrival is forecast for a last vehicle that is under way. */
+  arrivalRealtime: boolean;
+  /**
+   * Travel time with the forecasts as they are, from leaving the address (or
+   * the first departure) to being there. Not shown before departure; kept for
+   * the traffic picture.
+   */
+  durationSeconds: number;
+  /** The same trip by the timetable. */
+  scheduledDurationSeconds: number;
+  /**
+   * Entur's typical delay for the last vehicle where the traveller gets off,
+   * when that vehicle is not under way and so has no forecast of its own.
+   * Null otherwise, for light rail and boat, and when the median is less than
+   * a minute, since there is then nothing to tell.
+   */
+  typicalArrivalDelay: TypicalDelay | null;
+}
+
+/**
+ * One card: the best of the trips that share a last vehicle, with the others
+ * behind it. The vehicles of the way between a stop near the address and the
+ * address do not count as the last, since that way is for the app to choose.
+ */
+export interface TripCard extends PlannedTrip {
+  /** The other trips of the card, best first. */
+  alternatives: PlannedTrip[];
+}
+
+export interface TripOptions {
+  /**
+   * How late, in seconds, the forecast may say the traveller is for a transfer
+   * that is still taken. None before departure: a trip with a missed transfer
+   * is not offered. On board it is a minute, see MISSED_GRACE_SECONDS.
+   */
+  missedGraceSeconds?: number;
+}
+
+const ms = (time: string) => new Date(time).getTime();
+const iso = (time: number) => new Date(time).toISOString();
+
+/**
+ * Looks up walking times in the order the traveller decided: their own time for
+ * the walk, then Entur's, otherwise none.
+ */
+export function walkLookup(times: WalkTimes) {
+  const known = new Map(times.transferWalks.map((walk) => [walk.key, walk]));
+  const own = (key: string): number | null => times.walkOverrides[key] ?? null;
+
+  return {
+    /** A walking leg between two stops, or between the address and a stop. */
+    leg(leg: WalkLeg): number {
+      const key = walkKey(leg.from, leg.to);
+      const walk: Walk = {
+        key,
+        from: leg.from,
+        to: leg.to,
+        fromPlatform: null,
+        toPlatform: null,
+        samePlatform: false,
+        enturSeconds: leg.seconds ?? null,
+        ownSeconds: own(key),
+      };
+      return effectiveSeconds(walk);
+    },
+
+    /**
+     * A change of vehicle without a walking leg, by the platforms actually used.
+     * A time the traveller set for the two stops as a whole counts where the
+     * platforms differ and nothing is known about this pair of them.
+     */
+    transfer(from: RideEnd, to: RideEnd): number {
+      const key = walkKey({ id: from.quayId }, { id: to.quayId });
+      const entur = known.get(key);
+      const samePlatform = from.quayId === to.quayId;
+      const walk: Walk = {
+        key,
+        from: from.stop,
+        to: to.stop,
+        fromPlatform: from.platform,
+        toPlatform: to.platform,
+        samePlatform,
+        enturSeconds: entur?.seconds ?? null,
+        ownSeconds: own(key) ?? (entur || samePlatform ? null : own(walkKey(from.stop, to.stop))),
+      };
+      return effectiveSeconds(walk);
+    },
+  };
+}
+
+export type WalkLookup = ReturnType<typeof walkLookup>;
+
+/** One vehicle of the path, with the walking legs that lead to it from the previous vehicle or the address. */
+interface Stage {
+  /** Where the vehicle's leg is in the path. */
+  legIndex: number;
+  rides: Ride[];
+  walksBefore: WalkLeg[];
+  walkSecondsBefore: number;
+  departs: number[];
+  arrives: number[];
+}
+
+interface Link {
+  marginSeconds: number;
+  walkSeconds: number;
+  /** The traveller stays on the same vehicle; there is no transfer to make. */
+  sameVehicle: boolean;
+}
+
+/** The best way on from one ride: when it gets the traveller there, and by which ride on the next stage. */
+interface Best {
+  arrival: number;
+  next: number | null;
+  /** The smallest transfer time on the way from here. */
+  minMargin: number;
+}
+
+function stagesOf(
+  path: Leg[],
+  ridesFor: (leg: TransitLeg) => Ride[],
+  walks: WalkLookup,
+): { stages: Stage[]; walksAfter: WalkLeg[] } {
+  const stages: Stage[] = [];
+  let pending: WalkLeg[] = [];
+  for (const [legIndex, leg] of path.entries()) {
+    if (leg.kind === 'walk') {
+      pending.push(leg);
+      continue;
+    }
+    const rides = ridesFor(leg);
+    stages.push({
+      legIndex,
+      rides,
+      walksBefore: pending,
+      walkSecondsBefore: pending.reduce((sum, walk) => sum + walks.leg(walk), 0),
+      departs: rides.map((ride) => ms(ride.boarding.expected)),
+      arrives: rides.map((ride) => ms(ride.alighting.expected)),
+    });
+    pending = [];
+  }
+  return { stages, walksAfter: pending };
+}
+
+function timeAtStop(end: RideEnd): TimeAtStop {
+  return { aimed: end.aimed, expected: end.expected, realtime: end.realtime };
+}
+
+/**
+ * The marking beside a departure. A forecast that differs from the timetable
+ * is shown as a deviation whether or not the vehicle has started. A forecast
+ * that agrees with it counts as real time only for a vehicle that is under way.
+ */
+function markingOf(ride: Ride): DepartureMarking {
+  const marking = departureMarking({
+    aimedTime: ride.boarding.aimed,
+    expectedTime: ride.boarding.expected,
+    realtime: true,
+  });
+  return marking.kind === 'realtime' && !isLive(ride) ? { kind: 'scheduled' } : marking;
+}
+
+/** What to tell under the table about a last vehicle that has no forecast of its own. */
+function typicalDelayToShow(ride: Ride): TypicalDelay | null {
+  if (isLive(ride) || isPrecise(ride)) return null;
+  const delay = ride.alighting.typicalDelay;
+  return delay && Math.round(delay.p50Seconds / 60) >= 1 ? delay : null;
+}
+
+function rideRow(ride: Ride, transfer: Transfer | null): RideRow {
+  const departure = timeAtStop(ride.boarding);
+  return {
+    kind: 'ride',
+    line: ride.line,
+    mode: ride.mode,
+    destination: ride.destination,
+    serviceJourneyId: ride.serviceJourneyId,
+    date: ride.date,
+    from: ride.boarding.stop,
+    fromPlatform: ride.boarding.platform,
+    to: ride.alighting.stop,
+    toPlatform: ride.alighting.platform,
+    departure,
+    arrival: timeAtStop(ride.alighting),
+    marking: markingOf(ride),
+    started: ride.started,
+    precise: isPrecise(ride),
+    predictionInaccurate: ride.predictionInaccurate,
+    typicalDelay: { departure: ride.boarding.typicalDelay, arrival: ride.alighting.typicalDelay },
+    transfer,
+  };
+}
+
+/**
+ * The concrete trips along one path: for every departure of the first vehicle
+ * that the traveller can still reach, the vehicles onward that get them there
+ * first. Where several ways onward arrive at the same time, the one whose
+ * tightest transfer is largest is taken.
+ *
+ * A transfer holds when the next vehicle leaves no earlier than the traveller
+ * arrives and has walked. With `missedGraceSeconds`, one missed by no more than
+ * that is still taken, with a negative transfer time, since it may yet be
+ * caught. Every transfer tells when the traveller arrives if it is missed.
+ * All times are Entur's forecasts as given.
+ */
+export function tripsOnPath(
+  { legs: path, legsToAddress }: TripPath,
+  ridesFor: (leg: TransitLeg) => Ride[],
+  walks: WalkLookup,
+  now: Date,
+  { missedGraceSeconds = 0 }: TripOptions = {},
+): PlannedTrip[] {
+  const { stages, walksAfter } = stagesOf(path, ridesFor, walks);
+  if (stages.length === 0 || stages.some((stage) => stage.rides.length === 0)) return [];
+
+  const walkSecondsAfter = walksAfter.reduce((sum, walk) => sum + walks.leg(walk), 0);
+  const lastStage = stages.length - 1;
+  // The vehicle that decides the card: the last one before the way to the address.
+  const beforeAddress = stages.filter((stage) => stage.legIndex < path.length - legsToAddress).length - 1;
+  const cardStage = beforeAddress >= 0 ? beforeAddress : lastStage;
+
+  /** The change from ride `i` of the stage before `k` to ride `j` of stage `k`. */
+  const link = (k: number, i: number, j: number): Link => {
+    const stage = stages[k];
+    const from = stages[k - 1].rides[i];
+    const to = stage.rides[j];
+    const sameVehicle =
+      stage.walksBefore.length === 0 &&
+      from.serviceJourneyId === to.serviceJourneyId &&
+      from.date === to.date &&
+      stage.departs[j] >= stages[k - 1].arrives[i];
+    const walkSeconds = sameVehicle
+      ? 0
+      : stage.walksBefore.length
+        ? stage.walkSecondsBefore
+        : walks.transfer(from.alighting, to.boarding);
+    const marginSeconds = transferMarginSeconds({
+      arrival: from.alighting.expected,
+      departure: to.boarding.expected,
+      walkSeconds,
+    });
+    return { marginSeconds, walkSeconds, sameVehicle };
+  };
+
+  // Worked out from the last vehicle backwards: the best way on from each ride.
+  const best: (Best | null)[][] = stages.map(() => []);
+  best[lastStage] = stages[lastStage].arrives.map((arrival) => ({
+    arrival: arrival + walkSecondsAfter * 1000,
+    next: null,
+    minMargin: Infinity,
+  }));
+  for (let k = lastStage - 1; k >= 0; k--) {
+    best[k] = stages[k].rides.map((_, i) => {
+      let chosen: Best | null = null;
+      for (let j = 0; j < stages[k + 1].rides.length; j++) {
+        const onward = best[k + 1][j];
+        if (!onward) continue;
+        const { marginSeconds, sameVehicle } = link(k + 1, i, j);
+        if (!sameVehicle && marginSeconds < -missedGraceSeconds) continue;
+        const minMargin = Math.min(sameVehicle ? Infinity : marginSeconds, onward.minMargin);
+        if (
+          !chosen ||
+          onward.arrival < chosen.arrival ||
+          (onward.arrival === chosen.arrival && minMargin > chosen.minMargin)
+        ) {
+          chosen = { arrival: onward.arrival, next: j, minMargin };
+        }
+      }
+      return chosen;
+    });
+  }
+
+  /** When the traveller arrives by the next departure of stage `k` after ride `taken` that is surely caught. */
+  const arrivalIfMissed = (k: number, from: number, taken: number): string | null => {
+    let arrival: number | null = null;
+    for (let j = 0; j < stages[k].rides.length; j++) {
+      const onward = best[k][j];
+      if (!onward || stages[k].departs[j] <= stages[k].departs[taken]) continue;
+      if (link(k, from, j).marginSeconds < 0) continue;
+      if (arrival === null || onward.arrival < arrival) arrival = onward.arrival;
+    }
+    return arrival === null ? null : iso(arrival);
+  };
+
+  const first = stages[0];
+  const leaveEarlier = first.walkSecondsBefore * 1000;
+  const trips: PlannedTrip[] = [];
+
+  first.rides.forEach((firstRide, start) => {
+    const onward = best[0][start];
+    // A departure the traveller cannot reach with the walk to it counted in is not offered.
+    if (!onward || first.departs[start] - leaveEarlier < now.getTime()) return;
+
+    const chain: number[] = [start];
+    for (let k = 0; k < lastStage; k++) {
+      const next = best[k][chain[k]]?.next;
+      if (next === null || next === undefined) return;
+      chain.push(next);
+    }
+
+    const rows: TripRow[] = [];
+    const ids: string[] = [];
+    for (let k = 0; k <= lastStage; k++) {
+      const stage = stages[k];
+      const ride = stage.rides[chain[k]];
+      const change = k > 0 ? link(k, chain[k - 1], chain[k]) : null;
+      const previous = rows[rows.length - 1];
+
+      if (change?.sameVehicle && previous?.kind === 'ride') {
+        // Staying on board: the row of the vehicle is extended to where the traveller finally gets off.
+        const boardedAs = stages[k - 1].rides[chain[k - 1]];
+        rows[rows.length - 1] = {
+          ...previous,
+          to: ride.alighting.stop,
+          toPlatform: ride.alighting.platform,
+          arrival: timeAtStop(ride.alighting),
+          predictionInaccurate: previous.predictionInaccurate || ride.predictionInaccurate,
+          typicalDelay: { ...previous.typicalDelay, arrival: ride.alighting.typicalDelay },
+        };
+        ids[ids.length - 1] = `${boardedAs.serviceJourneyId}@${boardedAs.date}:${previous.from.id}>${ride.alighting.stop.id}`;
+        continue;
+      }
+
+      for (const walk of stage.walksBefore) {
+        rows.push({
+          kind: 'walk',
+          position: k === 0 ? 'start' : 'between',
+          from: walk.from,
+          to: walk.to,
+          seconds: walks.leg(walk),
+        });
+      }
+      const transfer: Transfer | null = change && {
+        marginSeconds: change.marginSeconds,
+        status: marginStatus(change.marginSeconds),
+        walkSeconds: change.walkSeconds,
+        arrivalIfMissed: arrivalIfMissed(k, chain[k - 1], chain[k]),
+      };
+      rows.push(rideRow(ride, transfer));
+      ids.push(`${ride.serviceJourneyId}@${ride.date}:${ride.boarding.stop.id}>${ride.alighting.stop.id}`);
+    }
+    for (const walk of walksAfter) {
+      rows.push({ kind: 'walk', position: 'end', from: walk.from, to: walk.to, seconds: walks.leg(walk) });
+    }
+
+    const lastRide = stages[lastStage].rides[chain[lastStage]];
+    const cardRide = stages[cardStage].rides[chain[cardStage]];
+    const leaves = first.departs[start] - leaveEarlier;
+    const scheduledStart = ms(firstRide.boarding.aimed) - leaveEarlier;
+    const scheduledEnd = ms(lastRide.alighting.aimed) + walkSecondsAfter * 1000;
+    const departure = timeAtStop(firstRide.boarding);
+
+    trips.push({
+      id: ids.join('|'),
+      cardKey: `${cardRide.serviceJourneyId}@${cardRide.date}`,
+      rows,
+      from: path[0].from,
+      to: path[path.length - 1].to,
+      leaveAt: first.walksBefore.length ? iso(leaves) : null,
+      departure,
+      departureMarking: markingOf(firstRide),
+      arrival: iso(onward.arrival),
+      arrivalRealtime: isLive(lastRide) && lastRide.alighting.realtime,
+      durationSeconds: (onward.arrival - leaves) / 1000,
+      scheduledDurationSeconds: (scheduledEnd - scheduledStart) / 1000,
+      typicalArrivalDelay: typicalDelayToShow(lastRide),
+    });
+  });
+
+  return trips;
+}
+
+const rideRows = (trip: PlannedTrip) => trip.rows.flatMap((row) => (row.kind === 'ride' ? [row] : []));
+
+/** The smallest transfer time of the trip; infinite when there is no transfer. */
+function tightestMargin(trip: PlannedTrip): number {
+  return Math.min(...rideRows(trip).flatMap((row) => (row.transfer ? [row.transfer.marginSeconds] : [])));
+}
+
+/**
+ * True when every transfer of the trip is comfortable: more than three minutes
+ * are left after walking, which the screen shows in green. A trip without a
+ * transfer has nothing that can fail and counts as comfortable.
+ */
+export function isComfortable(trip: PlannedTrip): boolean {
+  return rideRows(trip).every((row) => !row.transfer || row.transfer.status === 'good');
+}
+
+const startsAt = (trip: PlannedTrip) => ms(trip.leaveAt ?? trip.departure.expected);
+
+/**
+ * Sorts trips by when the traveller is there. Of trips arriving together, one
+ * whose transfers are all comfortable comes before one with a tight transfer,
+ * then the one that starts last, then the one whose tightest transfer is
+ * largest, then the one with the fewest vehicles. The same vehicles boarded and
+ * left at the same stops are listed once.
+ */
+export function rankTrips(trips: PlannedTrip[]): PlannedTrip[] {
+  // Infinity less infinity is not a number, so the margins are compared rather than subtracted.
+  const byMargin = (a: PlannedTrip, b: PlannedTrip) => {
+    const [ofA, ofB] = [tightestMargin(a), tightestMargin(b)];
+    return ofA === ofB ? 0 : ofA > ofB ? -1 : 1;
+  };
+
+  const sorted = [...trips].sort(
+    (a, b) =>
+      ms(a.arrival) - ms(b.arrival) ||
+      Number(isComfortable(b)) - Number(isComfortable(a)) ||
+      startsAt(b) - startsAt(a) ||
+      byMargin(a, b) ||
+      rideRows(a).length - rideRows(b).length ||
+      a.id.localeCompare(b.id),
+  );
+  const seen = new Set<string>();
+  return sorted.filter((trip) => {
+    if (seen.has(trip.id)) return false;
+    seen.add(trip.id);
+    return true;
+  });
+}
+
+/**
+ * One card per last vehicle before the way to the address. Trips that share it
+ * compete: they differ only in how the traveller gets to that vehicle, where
+ * they get off it, and how they get from there to the address. The best of
+ * them by rank is the card, and the rest are kept behind it. The cards stay
+ * sorted by when the traveller is there.
+ */
+export function cardsOf(ranked: PlannedTrip[]): TripCard[] {
+  const cards = new Map<string, TripCard>();
+  for (const trip of ranked) {
+    const card = cards.get(trip.cardKey);
+    if (card) card.alternatives.push(trip);
+    else cards.set(trip.cardKey, { ...trip, alternatives: [] });
+  }
+  return [...cards.values()];
+}
+
+/** The cards to show, and the ones another card makes pointless. */
+export interface CardSelection {
+  shown: TripCard[];
+  /** Kept so that the screen can offer to show more. */
+  hidden: TripCard[];
+}
+
+/**
+ * True when `other` makes `card` pointless: it starts no earlier and is there
+ * no later, and is better on at least one of the two. A card whose transfers
+ * are all comfortable is not beaten by one with a tight transfer, since the
+ * traveller may want the safer trip. Start is when the traveller must leave:
+ * the address where they walk from it, otherwise the first departure.
+ */
+function beats(other: PlannedTrip, card: PlannedTrip): boolean {
+  if (isComfortable(card) && !isComfortable(other)) return false;
+  const later = startsAt(other) - startsAt(card);
+  const sooner = ms(card.arrival) - ms(other.arrival);
+  return later >= 0 && sooner >= 0 && (later > 0 || sooner > 0);
+}
+
+/**
+ * Splits the cards into those to show and those another card beats. Two cards
+ * that start and arrive at the same moment do not beat each other: both are
+ * shown, in the order they are ranked. The order of the cards is kept.
+ */
+export function hideBeaten(cards: TripCard[]): CardSelection {
+  const selection: CardSelection = { shown: [], hidden: [] };
+  for (const card of cards) {
+    const beaten = cards.some((other) => other !== card && beats(other, card));
+    (beaten ? selection.hidden : selection.shown).push(card);
+  }
+  return selection;
+}

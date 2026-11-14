@@ -24,7 +24,7 @@ En app for iPhone og Android som gjør pendlingen mellom Krokåsskiftet og Birke
 ### Før avreise
 
 - Neste avganger per alternativ med sanntid, ankomsttid og om byttene holder.
-- Reisetid nå ved siden av rutetid.
+- Reisetid nå ved siden av rutetid. Avgjort 14. november 2026: vises ikke på forsiden; tallet regnes ut og beholdes til trafikkbildet.
 - For busser som ikke har startet: Enturs typiske forsinkelse (median og «dårlig dag»).
 
 ### Om bord-modus
@@ -159,6 +159,12 @@ Status 13. november 2026:
 - Reisetid nå mot rutetid, og typisk forsinkelse for busser som ikke har startet.
 
 Ferdig når appen kan brukes til å velge avgang hjemmefra og fra jobb.
+
+Status 14. november 2026:
+
+- Gjort: motoren (`src/engine` og `src/entur/calls.ts`) med tester, kjørt mot Entur for begge reisetyper. Inngangen er `planTrips(tripType, now)`. Den gir ett kort per siste kjøretøy før veien mellom holdeplassen og adressen, sortert på ankomst dør til dør.
+- Avgjort samme dag: reglene for forsiden, blant annet hva «sanntid» betyr og hva som er ett kort. De står i `docs/design/for-avreise.md`.
+- Gjenstår: skjermen, og oppdatering hvert 30. sekund.
 
 ### Fase 5: Om bord-modus
 
