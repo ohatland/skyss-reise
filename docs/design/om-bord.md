@@ -151,10 +151,9 @@ Bygget 14. november 2026 etter skissen og reglene over (`src/app/om-bord.tsx`, t
 - **Feil mot Entur** vises som på forsiden: «Fikk ikke oppdatert fra Entur. Tallene er fra HH:MM.» Et trykk på linjen prøver igjen.
 - **Økten og turloggen ligger bare i minnet** så lenge appen er åpen. Lastes appen på nytt, er de borte, og skjermen går til forsiden.
 - **Går brukeren av på en holdeplass som ikke er med i de lagrede alternativene,** har appen ingen reiser videre derfra. Avgjort av brukeren 14. november 2026 da skjermen ble bygget, med svaret «Avslutt-knapp»: skjermen sier «Ingen lagrede reiser videre fra {holdeplass}.» og har knappen «Avslutt reisen», som avslutter reisen og går tilbake til forsiden. Reservesøk hos Entur kommer senere. *Ordlyden i teksten og på knappen er min.*
-- **Går brukeren tilbake til forsiden** (tilbakeknapp eller sveip), ligger økten fortsatt i minnet, men forsiden har ingen vei tilbake til den. Et nytt trykk på et kort starter en ny reise.
+- **Går brukeren tilbake til forsiden** (tilbakeknapp eller sveip), ligger økten fortsatt i minnet. Forsiden har da knappen «Tilbake til reisen» nederst, over knappen for det øverste kortet, så lenge reisen pågår. Avgjort av brukeren 15. november 2026 på spørsmålet «Skal jeg legge inn knappen «Tilbake til reisen» på forsiden?»: «Ja, legg inn». Et nytt trykk på et kort starter en ny reise og erstatter den som pågår. *Plasseringen og den svake bakgrunnen på knappen er min.*
 
 ### Ikke avgjort
 
-- **Veien tilbake til om bord fra forsiden** når brukeren har gått tilbake midt i en reise.
 - **Hvor turrapporten lagres.**
 

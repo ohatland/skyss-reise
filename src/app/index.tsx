@@ -11,6 +11,7 @@ import { boardButtonText, defaultTripType, labelsOnEveryCard } from '@/core/fron
 import { boardingOf } from '@/core/on-board';
 import { formatClock } from '@/core/time';
 import type { PlannedTrip } from '@/engine/trips';
+import { useTripGoing } from '@/hooks/use-on-board';
 import { useTheme } from '@/hooks/use-theme';
 import { useTripPlan } from '@/hooks/use-trip-plan';
 import { TRIP_TYPES } from '@/model/places';
@@ -49,6 +50,8 @@ export default function BeforeDepartureScreen() {
   };
   const top = noRoutes ? undefined : shown[0];
   const topButton = top ? boardButtonText(top) : null;
+  // A trip the traveller left the on-board screen of is still going, and this is the way back to it.
+  const tripGoing = useTripGoing();
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -144,14 +147,24 @@ export default function BeforeDepartureScreen() {
           ))}
       </ScrollView>
 
-      {top && topButton && (
+      {(tripGoing || (top && topButton)) && (
         <View style={styles.bar}>
-          <Pressable
-            onPress={() => board(top)}
-            accessibilityRole="button"
-            style={[styles.button, styles.wide, styles.grow, { borderColor: theme.border }]}>
-            <Text style={[styles.body, { color: theme.text }]}>{topButton}</Text>
-          </Pressable>
+          {tripGoing && (
+            <Pressable
+              onPress={() => router.push('/om-bord')}
+              accessibilityRole="button"
+              style={[styles.button, styles.wide, { borderColor: theme.border, backgroundColor: theme.cardHighlight }]}>
+              <Text style={[styles.body, { color: theme.text }]}>Tilbake til reisen</Text>
+            </Pressable>
+          )}
+          {top && topButton && (
+            <Pressable
+              onPress={() => board(top)}
+              accessibilityRole="button"
+              style={[styles.button, styles.wide, { borderColor: theme.border }]}>
+              <Text style={[styles.body, { color: theme.text }]}>{topButton}</Text>
+            </Pressable>
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -181,6 +194,5 @@ const styles = StyleSheet.create({
   },
   wide: { alignItems: 'center' },
   more: { marginTop: Spacing.three },
-  grow: { flex: 1 },
-  bar: { flexDirection: 'row', paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
+  bar: { gap: Spacing.two, paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
 });

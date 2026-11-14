@@ -21,6 +21,12 @@ export interface OnBoard {
   end: () => void;
 }
 
+/** True while a trip on board is going, so that the front page can lead back to it. */
+export function useTripGoing(): boolean {
+  const state = useSyncExternalStore(onBoardStore.subscribe, onBoardStore.get, onBoardStore.get);
+  return state !== null && !state.over;
+}
+
 /**
  * The trip on board, which lasts while the app is open, apart from the screen.
  * While the screen is in view with the app in the foreground, Entur is looked
