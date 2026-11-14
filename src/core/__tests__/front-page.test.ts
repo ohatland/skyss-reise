@@ -3,6 +3,7 @@ import {
   cardLabels,
   defaultTripType,
   labelsOnEveryCard,
+  missedTransferText,
   typicalDelayText,
   walkMinutes,
   walkText,
@@ -126,5 +127,34 @@ describe('typicalDelayText', () => {
   it('says nothing when it rounds to zero or there is none', () => {
     expect(typicalDelayText(trip({ typicalArrivalDelay: { p50Seconds: 20, p90Seconds: 60 } }))).toBeNull();
     expect(typicalDelayText(trip({}))).toBeNull();
+  });
+});
+
+describe('missedTransferText', () => {
+  const changeTo = (marginSeconds: number, arrivalIfMissed: string | null): RideRow => ({
+    ...ride(grana, birkeland),
+    serviceJourneyId: `SJ:${marginSeconds}`,
+    transfer: { marginSeconds, status: marginSeconds < 0 ? 'missed' : marginSeconds > 180 ? 'good' : 'tight', walkSeconds: 0, arrivalIfMissed },
+  });
+
+  it('tells when the traveller is there if a transfer forecast as missed is not caught', () => {
+    const red = trip({ rows: [ride(), changeTo(-10, '2026-11-16T07:29:40Z')] });
+    // 07:29 UTC is 08:29 in Norway in winter.
+    expect(missedTransferText(red)).toBe('Rekker du den ikke: fremme 08:29');
+  });
+
+  it('tells nothing for a trip whose transfers are caught, however tight', () => {
+    expect(missedTransferText(trip({ rows: [ride(), changeTo(0, '2026-11-16T07:29:00Z')] }))).toBeNull();
+    expect(missedTransferText(trip({ rows: [ride(), changeTo(400, '2026-11-16T07:29:00Z')] }))).toBeNull();
+    expect(missedTransferText(trip({}))).toBeNull();
+  });
+
+  it('tells nothing when there is no way on after the missed transfer', () => {
+    expect(missedTransferText(trip({ rows: [ride(), changeTo(-10, null)] }))).toBeNull();
+  });
+
+  it('tells of the first missed transfer when a trip has two', () => {
+    const twice = trip({ rows: [ride(), changeTo(-27, '2026-11-16T18:26:00Z'), changeTo(-43, '2026-11-16T18:22:00Z')] });
+    expect(missedTransferText(twice)).toBe('Rekker du den ikke: fremme 19:26');
   });
 });

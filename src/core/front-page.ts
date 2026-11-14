@@ -1,4 +1,5 @@
 import { osloOffsetMinutes } from '@/core/oslo-time';
+import { formatClock } from '@/core/time';
 import type { PlannedTrip, RideRow, TripRow, WalkRow } from '@/engine/trips';
 import type { StopRef, TripTypeId } from '@/model/types';
 
@@ -70,6 +71,21 @@ export function boardingText(row: RideRow): string {
 export function typicalDelayText(trip: PlannedTrip): string | null {
   const minutes = trip.typicalArrivalDelay ? Math.round(trip.typicalArrivalDelay.p50Seconds / 60) : 0;
   return minutes > 0 ? `Typisk fremme ${minutes} min senere` : null;
+}
+
+/**
+ * "Rekker du den ikke: fremme 08:29" for a trip with a transfer the forecast
+ * says is missed: when the traveller is there by the next possible trip
+ * onward. For the first such transfer of the trip. Null when no transfer is
+ * missed, or there is no way on after it.
+ */
+export function missedTransferText(trip: PlannedTrip): string | null {
+  for (const row of trip.rows) {
+    if (row.kind === 'ride' && row.transfer?.status === 'missed') {
+      return row.transfer.arrivalIfMissed ? `Rekker du den ikke: fremme ${formatClock(row.transfer.arrivalIfMissed)}` : null;
+    }
+  }
+  return null;
 }
 
 /** A stable key for a row within its card. */

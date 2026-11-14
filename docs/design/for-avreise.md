@@ -37,8 +37,9 @@ Variant B, med bussens avgang stort også på Fra jobb og «fra jobb senest» i 
 
 Gangtid hjemmefra til Krokåsskiftet er ikke lagt inn. Settes den, kan Til jobb vise «Gå hjemmefra» på samme måte.
 
-## Avvist
+## Avvist og erstattet
 
+- **Erstattet 14. november 2026 av «Kort blir stående» under:** «Et bytte prognosen sier er tapt, vises ikke før avreise. En reise der et bytte har negativ overgangstid, er ikke med blant kortene.» Regelen fra samme dag gjorde at kort forsvant og kom tilbake når overgangstiden lå rundt null.
 - Et tall for tid til avgang i kolonnen for overgangstid på første rad. Det ble oppfattet som uforståelig, fordi det ikke er en overgang mellom to busser.
 - Tekst som «2 min forsinket» etter avgangstiden. Gjennomstreket rutetid ble valgt i stedet.
 
@@ -54,10 +55,9 @@ Gangtid hjemmefra til Krokåsskiftet er ikke lagt inn. Settes den, kan Til jobb 
 
 Avgjort av brukeren etter at motoren var bygget og kjørt mot Entur. Motoren ligger i `src/engine`.
 
-- **Et bytte prognosen sier er tapt, vises ikke før avreise.** En reise der et bytte har negativ overgangstid, er ikke med blant kortene. Regelen fra [om bord-skjermen](om-bord.md) (rødt mens brukeren er under ett minutt for sen, med «Rekker du den ikke: fremme 08:29») gjelder om bord, der brukeren allerede sitter på bussen. I motoren er dette et valg (`missedGraceSeconds`) som er av før avreise.
 - **«Sanntid» betyr at kjøretøyet er underveis på turen.** Entur setter sanntidsflagget også på avganger flere timer frem, for busser som ikke har startet, og tiden er da ikke målt. En avgang merkes derfor «sanntid» bare når Entur har registrert at kjøretøyet har gått fra turens første holdeplass. Har det ikke startet, merkes avgangen «rutetid», og Enturs typiske forsinkelse vises for den. Bybanen og båten regnes som presise som før.
 - **Ett kort per siste kjøretøy.** Reiser som ender med samme kjøretøy på samme tur, konkurrerer med hverandre og er ett kort. De andre reisene i gruppen følger med bak kortet (`alternatives`), slik at en skjerm kan vise dem senere. Kortene sorteres på ankomst som før.
-  - **Rekkefølgen innen et kort:** først den som er tidligst fremme dør til dør, så en reise med bare grønne bytter foran en med et gult, så den som går senest fra start, så den med størst minste overgangstid, så den med færrest bytter. Et bytte er grønt når overgangstiden er over 3:00. En reise uten bytter regnes som grønn.
+  - **Rekkefølgen innen et kort:** først en reise med minst ett minutt på alle bytter (tolkning, se «Den beste øverst» under), så den som er tidligst fremme dør til dør, så en reise med bare grønne bytter foran en med et gult, så den som går senest fra start, så den med størst minste overgangstid, så den med færrest bytter. Et bytte er grønt når overgangstiden er over 3:00. En reise uten bytter regnes som grønn.
   - Bakgrunn for at grønt går foran senest start: lørdag 14. november ble kortet med ankomst 16:07 reisen 53, Bybanen, 600, 400 (start 14:41, minste overgangstid 2:38), foran 50E, 400 (start 14:37, minste overgangstid 6:53).
   - **Veien mellom holdeplassen og jobben teller ikke.** Appen velger selv den veien, slik det er avgjort for alternativene («Appen velger selv veien når brukeren skal reise», [alternativer.md](alternativer.md)). Kortet avgjøres derfor av det siste kjøretøyet som ikke hører til forbindelsen mellom ankerholdeplassen og adressen. Til jobb er «Bybanen til Birkelandsskiftet og gå 20 min» og «Bybanen til Birkelandsskiftet, 56 til Ådlandsflaten og gå 11 min» samme kort.
   - Går samme kjøretøy forbi flere ankerholdeplasser (51 til Birkelandsskiftet eller Blomsterdalen), er det også ett kort. Appen velger selv hvor brukeren går av.
@@ -72,4 +72,23 @@ Avgjort av brukeren etter at motoren var bygget og kjørt mot Entur. Motoren lig
 - **Typisk forsinkelse på null vises ikke.** Linjen «Typisk fremme N min senere» står ikke når Enturs median runder av til null minutter eller er negativ.
 - **Gange mellom to holdeplasser underveis er en egen rad:** «Gå», fra og til, og minutter, slik gangen til og fra jobben vises. Overgangstiden på neste rad har gangen regnet inn.
 - **Reisetid nå mot rutetid vises ikke på forsiden.** Motoren regner den ut (`durationSeconds` og `scheduledDurationSeconds`), og tallet beholdes til trafikkbildet i fase 6.
+- **Kort blir stående** (avgjort senere samme dag, erstatter regelen om at tapt bytte ikke vises). Brukeren ble spurt «Skal samme regel om at kort blir stående, gjelde på forsiden?» og svarte: «Ja, også forsiden». Regelen er den samme som [om bord](om-bord.md):
+  - Et kort blir stående selv om et bytte faller under ett minutt eller går litt i minus, med gul eller rød overgangstid.
+  - Kortet fjernes først når et bytte er tapt med mer enn tre minutter. Grensen var først ett minutt. I en prøve mot Entur samme kveld sto et kort rødt i fire minutter, ble fjernet og kom tilbake seks minutter senere med 0:17. Brukeren ble spurt «Skal et kort bli stående til byttet er tapt med mer enn tre minutter, ikke ett?» og svarte: «Ja, tre minutter».
+  - Et kort som er fjernet, kommer ikke tilbake før overgangstiden er 0:00 eller bedre. Mellom −3:00 og 0:00 skjer det ingenting.
+  - *Tolkning, ikke brukerens ord:* de tre minuttene gjelder bytter som har vært vist. Et bytte som ikke har vært vist, og som er tapt med mer enn ett minutt, blir ikke et nytt rødt kort.
+  - Forsiden husker hvilke bytter som er gitt opp, per reisetype, så lenge appen er åpen (`use-trip-plan.ts`).
+  - Et rødt kort har linjen «Rekker du den ikke: fremme HH:MM» under tabellen, som om bord. Tiden gjelder det første tapte byttet i reisen, og regnes fra neste mulige reise videre.
+- **Den beste øverst** (avgjort samme dag). Det som ble lagt fram for brukeren: «den beste reisen øverst (raskest med minst ett minutt på alle bytter), resten sortert på når du er fremme».
+  - Øverste kort er den beste reisen: tidligst fremme dør til dør blant reisene der hvert bytte har minst ett minutt (`PLAN_MIN_MARGIN_SECONDS`).
+  - Resten står under, sortert på ankomst. Et kort som er tidligere fremme enn det beste, men har et bytte under ett minutt, står dermed under det.
+  - Før avreise finnes ingen plan å holde på, så forsiden holder ikke fast på det øverste kortet slik om bord gjør.
+  - To kort som er fremme i samme minutt, skal stå i samme rekkefølge fra oppdatering til oppdatering. Ankomst og start sammenlignes derfor i hele minutter, slik de vises.
+  - Har ingen reise ett minutt på alle bytter, er kortene bare sortert på ankomst.
+  - For hver avgang regnes også reisen videre der hvert bytte har minst ett minutt, slik at den beste reisen alltid er blant kortene. Uten det ville en avgang med et knapt første bytte bare hatt den knappe reisen.
+- *Tolkninger av hva de to reglene betyr for de andre reglene. Brukeren har ikke tatt stilling til dem:*
+  - **Innen ett kort** går en reise med minst ett minutt på alle bytter foran en uten, før «tidligst fremme». Et kort viser dermed ikke et bytte på 0:00 når det ligger en tryggere reise bak det.
+  - **Et kort der et bytte har under ett minutt, skjuler ingen andre kort.** Unntaket fra før står: et kort med bare grønne bytter skjules ikke av et kort med et gult.
+  - **Det beste kortet skjules aldri,** heller ikke når et annet kort slår det på sekundene.
+  - Mellom kort som er like i hele minutter på både ankomst og start, avgjør fortsatt bare grønne bytter og størst minste overgangstid. To slike kort kan derfor bytte plass når marginene endrer seg.
 - **Holdeplassnavn vises fullt ut,** slik Entur skriver dem («Birkelandsskiftet terminal, plattform D»), også når de går over to linjer og kortet blir høyere enn i skissen. Forkortingen uten «terminal» brukes ikke på forsiden.

@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { formatClock } from '@/core/time';
-import { MISSED_GRACE_SECONDS, formatMargin } from '@/core/transfer';
+import { formatMargin } from '@/core/transfer';
 import { at, journey, ride, stop, transferWalk, walk } from '@/engine/__fixtures__/calls';
 import { tripPaths } from '@/engine/paths';
 import { callsNeeded, planFromCalls, planTrips } from '@/engine/plan';
+import type { TransferMemory } from '@/engine/transfers';
 import type { PlannedTrip } from '@/engine/trips';
 import type { StopCall, StopCallsResponse } from '@/entur/calls';
 import { setLogSinks } from '@/logging/logger';
@@ -135,24 +136,151 @@ describe('planFromCalls', () => {
     expect(cards[0].alternatives).toEqual([]);
   });
 
-  it('leaves out a trip with a transfer the forecast says is missed, unless told that it may still be caught', () => {
-    // The 50E is now forecast at Møhlenpris ten seconds after the 410 has left.
-    const late = afternoon.map((call) =>
-      call.line === '50E' && call.stopPlaceId === mohlenpris.id ? { ...call, expectedArrival: at('16:00:10'), expectedDeparture: at('16:00:10') } : call,
-    );
+  describe('a card whose transfer has little or nothing to spare', () => {
     const paths = tripPaths(routes, 'fromWork');
+    /** The afternoon with the 50E forecast at Møhlenpris at the given clock. The 410 leaves there at 16:00. */
+    const with50EAt = (clock: string) =>
+      afternoon.map((call) =>
+        call.line === '50E' && call.stopPlaceId === mohlenpris.id ? { ...call, expectedArrival: at(clock), expectedDeparture: at(clock) } : call,
+      );
+    const plan = (clock: string, memory: TransferMemory | null = null) => planFromCalls(paths, with50EAt(clock), routes, new Date(at('15:00')), memory);
+    const byThe410 = (margin: string) => ['Gå 15:19 – fremme 16:35', 'Gå til Grana 4 min', '57 Grana', '50E Birkelandsskiftet D 1:20', `410 Møhlenpris ${margin}`];
+    const byThe400 = ['Gå 15:41 – fremme 17:07', 'Gå til Kokstadskiftet 22 min', '23E Kokstadskiftet', '400 Storavatnet B 5:40'];
+    const key = 'journey:50E@2026-11-16:stop:Møhlenpris>journey:410@2026-11-16:stop:Møhlenpris';
 
-    const { shown: before } = planFromCalls(paths, late, routes, new Date(at('15:00')));
-    expect(before.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07']);
+    it('stays when the transfer has less than a minute, under the best trip', () => {
+      // 15:59:01 to 16:00:00. The trip by the 400 has a minute on every transfer and is the best, half an hour later.
+      const { shown, hidden } = plan('15:59:01');
+      expect(shown.map(card)).toEqual([byThe400, byThe410('0:59')]);
+      expect(hidden).toEqual([]);
+      // With a minute exactly it is the best itself.
+      expect(plan('15:59:00').shown.map(card)).toEqual([byThe410('1:00'), byThe400]);
+    });
 
-    const { shown: onBoard } = planFromCalls(paths, late, routes, new Date(at('15:00')), { missedGraceSeconds: MISSED_GRACE_SECONDS });
-    expect(onBoard.map(card)[0]).toEqual([
-      'Gå 15:19 – fremme 16:35',
-      'Gå til Grana 4 min',
-      '57 Grana',
-      '50E Birkelandsskiftet D 1:20',
-      '410 Møhlenpris −0:10',
-    ]);
+    it('stays, in red, when the forecast says the transfer is missed by a minute or less', () => {
+      expect(plan('16:00:10').shown.map(card)).toEqual([byThe400, byThe410('−0:10')]);
+      expect(plan('16:01:00').shown.map(card)).toEqual([byThe400, byThe410('−1:00')]);
+      // The other trip that ends on the same 410 stays behind the card.
+      expect(plan('16:00:10').shown[1].alternatives.map((trip) => card(trip)[0])).toEqual(['Gå 15:09 – fremme 16:35']);
+    });
+
+    it('stays, in red, until the transfer is missed by more than three minutes, once it has been shown', () => {
+      const first = plan('15:57:50');
+      expect(first.memory.removed).toEqual([]);
+      expect(first.memory.seen).toContain(key);
+
+      const late = plan('16:01:01', first.memory);
+      expect(late.shown.map(card)).toEqual([byThe400, byThe410('−1:01')]);
+      const later = plan('16:03:00', late.memory);
+      expect(later.shown.map(card)).toEqual([byThe400, byThe410('−3:00')]);
+      expect(later.memory.removed).toEqual([]);
+    });
+
+    it('goes when the transfer is missed by more than three minutes, and is remembered as given up', () => {
+      const gone = plan('16:03:01', plan('15:57:50').memory);
+      expect(gone.shown.map(card)).toEqual([byThe400]);
+      expect(gone.memory.removed).toEqual([key]);
+    });
+
+    it('is not shown when the transfer is first seen missed by more than a minute', () => {
+      // Without anything remembered, and with other transfers remembered but not this one.
+      expect(plan('16:01:01').shown.map(card)).toEqual([byThe400]);
+      const others = { seen: plan('15:57:50').memory.seen.filter((seen) => seen !== key), removed: [] };
+      const never = plan('16:01:01', others);
+      expect(never.shown.map(card)).toEqual([byThe400]);
+      expect(never.memory.removed).toEqual([]);
+    });
+
+    it('does not come back until the forecast says the transfer is caught', () => {
+      const gone = plan('16:03:01', plan('15:57:50').memory);
+      // Three minutes too late, a minute too late, and a second too late: nothing happens.
+      expect(plan('16:03:00', gone.memory).shown.map(card)).toEqual([byThe400]);
+      const closer = plan('16:01:00', gone.memory);
+      expect(closer.shown.map(card)).toEqual([byThe400]);
+      const almost = plan('16:00:01', closer.memory);
+      expect(almost.shown.map(card)).toEqual([byThe400]);
+      expect(almost.memory.removed).toEqual([key]);
+
+      // On time to the second, it is back.
+      const back = plan('16:00:00', almost.memory);
+      expect(back.shown.map(card)).toEqual([byThe400, byThe410('0:00')]);
+      expect(back.memory.removed).toEqual([]);
+
+      // Without what was remembered it would have come back in red at once.
+      expect(plan('16:01:00').shown.map(card)).toEqual([byThe400, byThe410('−1:00')]);
+    });
+
+    it('forgets a change that was given up once its vehicles are no longer among the calls', () => {
+      const gone = plan('16:03:01', plan('15:57:50').memory);
+      const without410 = with50EAt('16:03:01').filter((call) => call.line !== '410');
+      expect(planFromCalls(paths, without410, routes, new Date(at('15:00')), gone.memory).memory.removed).toEqual([]);
+    });
+  });
+
+  describe('the best trip', () => {
+    const paths = tripPaths(routes, 'toWork');
+    /** The morning with the 400 forecast at Frieda Fasmer at the given clock. The 23E leaves there at 07:35. */
+    const with400At = (clock: string) =>
+      morning.map((call) =>
+        call.serviceJourneyId === 'journey:400' && call.stopPlaceId === frieda.id ? { ...call, expectedArrival: at(clock), expectedDeparture: at(clock) } : call,
+      );
+    const plan = (clock: string) => planFromCalls(paths, with400At(clock), routes, new Date(at('07:00')));
+
+    it('is on top: there first among the trips where every transfer has a minute', () => {
+      const { shown, hidden } = plan('07:34:00');
+      expect(shown.map(card)).toEqual([
+        ['Avgang 07:09 – fremme 08:16', '400 Krokåsskiftet', '23E Frieda Fasmer 1:00', '51 Dolvik B 5:00', 'Gå fra Blomsterdalen 11 min'],
+        ['Avgang 07:25 – fremme 08:45', '410 Krokåsskiftet', '23E Frieda Fasmer 4:00', 'Gå fra Kokstadskiftet 22 min'],
+      ]);
+      expect(hidden.map((trip) => card(trip)[0])).toEqual(['Avgang 07:09 – fremme 08:27']);
+    });
+
+    it('is a later trip when the one that is there first has a transfer with less than a minute', () => {
+      // The 400 is at Frieda Fasmer a second later: 59 seconds before the 23E.
+      const { shown, hidden } = plan('07:34:01');
+      expect(shown.map(card)).toEqual([
+        // With the next 23E from Frieda Fasmer every transfer has a minute. Leaving at 07:25 gets the same one.
+        ['Avgang 07:25 – fremme 08:45', '410 Krokåsskiftet', '23E Frieda Fasmer 4:00', 'Gå fra Kokstadskiftet 22 min'],
+        // The two trips by the first 23E are there sooner. They stay, under the best, and hide no card.
+        ['Avgang 07:09 – fremme 08:16', '400 Krokåsskiftet', '23E Frieda Fasmer 0:59', '51 Dolvik B 5:00', 'Gå fra Blomsterdalen 11 min'],
+        ['Avgang 07:09 – fremme 08:27', '400 Krokåsskiftet', '23E Frieda Fasmer 0:59', 'Gå fra Kokstadskiftet 22 min'],
+      ]);
+      expect(hidden).toEqual([]);
+      // Leaving at 07:09 and waiting for the next 23E ends on the same vehicle, and lies behind the best card.
+      expect(shown[0].alternatives.map(card)).toEqual([
+        ['Avgang 07:09 – fremme 08:45', '400 Krokåsskiftet', '23E Frieda Fasmer 18:59', 'Gå fra Kokstadskiftet 22 min'],
+      ]);
+    });
+
+    it('is shown though another card would hide it', () => {
+      // Both leave work at 15:41 and are home at 17:07, as shown. By the second, the trip from Birkelandsskiftet
+      // leaves later and is there sooner, which would hide the other. That one has more to spare and is the best.
+      const calls = [
+        ...journey('23E', '23E', [[kokstadskiftet, '16:03'], [storavatnet, '16:30', { platform: 'B' }]]),
+        ...journey('400', '400', [[storavatnet, '16:35:40', { platform: 'B' }], [krokasskiftet, '17:07:50']]),
+        ...journey('50E', '50E', [[birkelandsskiftet, '16:01:30', { platform: 'D' }], [mohlenpris, '16:30']]),
+        ...journey('410', '410', [[mohlenpris, '16:35'], [krokasskiftet, '17:07:10']]),
+      ];
+      const { shown, hidden } = planFromCalls(tripPaths(routes, 'fromWork'), calls, routes, new Date(at('15:00')));
+      expect(shown.map(card)).toEqual([
+        ['Gå 15:41 – fremme 17:07', 'Gå til Kokstadskiftet 22 min', '23E Kokstadskiftet', '400 Storavatnet B 5:40'],
+        ['Gå 15:41 – fremme 17:07', 'Gå til Birkelandsskiftet 20 min', '50E Birkelandsskiftet D', '410 Møhlenpris 5:00'],
+      ]);
+      expect(hidden).toEqual([]);
+    });
+
+    it('is among the cards also when the trip that is there first for its departure is forecast as missed', () => {
+      const { shown } = plan('07:35:30');
+      expect(shown.map((trip) => card(trip).slice(0, 3))).toEqual([
+        ['Avgang 07:25 – fremme 08:45', '410 Krokåsskiftet', '23E Frieda Fasmer 4:00'],
+        ['Avgang 07:09 – fremme 08:16', '400 Krokåsskiftet', '23E Frieda Fasmer −0:30'],
+        ['Avgang 07:09 – fremme 08:27', '400 Krokåsskiftet', '23E Frieda Fasmer −0:30'],
+      ]);
+      const [, red] = shown;
+      const [, second] = red.rows;
+      // If the 23E is missed, the next one gets the traveller to Kokstadskiftet, and to work at 08:45.
+      expect(second.kind === 'ride' && second.transfer?.arrivalIfMissed).toBe(new Date(at('08:45')).toISOString());
+    });
   });
 
   it('gives the cards to work by when the traveller is at work, the walk included', () => {
@@ -171,7 +299,7 @@ describe('planFromCalls', () => {
   });
 
   it('gives nothing without calls or without paths', () => {
-    const nothing = { shown: [], hidden: [] };
+    const nothing = { shown: [], hidden: [], memory: { seen: [], removed: [] } };
     expect(planFromCalls(tripPaths(routes, 'toWork'), [], routes, new Date(at('07:00')))).toEqual(nothing);
     expect(planFromCalls([], morning, routes, new Date(at('07:00')))).toEqual(nothing);
   });
@@ -234,18 +362,34 @@ describe('planTrips', () => {
     expect(plan.hidden).toEqual([]);
   });
 
-  it('passes on that a missed transfer may still be caught', async () => {
+  it('keeps a card whose transfer is forecast as missed by less than a minute', async () => {
     const late = afternoon.map((call) =>
       call.line === '410' && call.stopPlaceId === mohlenpris.id ? { ...call, expectedArrival: at('15:57:40'), expectedDeparture: at('15:57:40') } : call,
     );
     const { fetchImpl } = entur(late);
+    const plan = await planTrips('fromWork', new Date(at('15:00')), { routes, entur: { fetchImpl } });
+    // The trip by the 400 holds and is on top. The one by the 410, ten seconds too late, stays under it.
+    expect(plan.trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07', 'Gå 15:19 – fremme 16:35']);
+  });
+
+  it('gives what to remember, and with it keeps a card that was given up away', async () => {
+    const at410 = (clock: string) =>
+      afternoon.map((call) =>
+        call.line === '410' && call.stopPlaceId === mohlenpris.id ? { ...call, expectedArrival: at(clock), expectedDeparture: at(clock) } : call,
+      );
     const now = new Date(at('15:00'));
+    const run = (clock: string, memory?: TransferMemory) => planTrips('fromWork', now, { routes, entur: { fetchImpl: entur(at410(clock)).fetchImpl }, memory });
 
-    const before = await planTrips('fromWork', now, { routes, entur: { fetchImpl } });
-    expect(before.trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07']);
+    const first = await run('16:00');
+    expect(first.memory.removed).toEqual([]);
+    // The 410 now leaves 3:01 before the 50E is there, and then a minute before.
+    const gone = await run('15:54:49', first.memory);
+    expect(gone.trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07']);
+    expect(gone.memory.removed).toHaveLength(1);
 
-    const onBoard = await planTrips('fromWork', now, { routes, entur: { fetchImpl }, missedGraceSeconds: MISSED_GRACE_SECONDS });
-    expect(onBoard.trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:19 – fremme 16:35', 'Gå 15:41 – fremme 17:07']);
+    const still = await run('15:56:50', gone.memory);
+    expect(still.trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07']);
+    expect((await run('15:56:50')).trips.map((trip) => card(trip)[0])).toEqual(['Gå 15:41 – fremme 17:07', 'Gå 15:19 – fremme 16:35']);
   });
 
   it('asks Entur for the calls of the stops and lines of the trip type, from the moment asked about', async () => {

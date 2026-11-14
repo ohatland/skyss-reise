@@ -6,6 +6,7 @@ import {
   boardingText,
   cardLabels,
   firstRide,
+  missedTransferText,
   rowKey,
   startsWalking,
   typicalDelayText,
@@ -36,6 +37,7 @@ export function TripCard({ trip, best, showLabels, showColumnHeadings }: Props) 
   const walking = startsWalking(trip);
   const first = firstRide(trip);
   const typical = typicalDelayText(trip);
+  const missed = missedTransferText(trip);
 
   return (
     <View
@@ -73,6 +75,7 @@ export function TripCard({ trip, best, showLabels, showColumnHeadings }: Props) 
         ))}
       </View>
 
+      {missed && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{missed}</Text>}
       {typical && <Text style={[styles.label, styles.typical, { color: theme.textMuted }]}>{typical}</Text>}
     </View>
   );
@@ -161,7 +164,8 @@ function describe(trip: PlannedTrip): string {
     .map((row) =>
       row.transfer ? `${row.line} fra ${row.from.name}, overgangstid ${formatMargin(row.transfer.marginSeconds)}` : `${row.line} fra ${row.from.name}`,
     );
-  return [`${start} ${startTime}`, `${end} ${formatClock(trip.arrival)}`, ...rides].join('. ');
+  const missed = missedTransferText(trip);
+  return [`${start} ${startTime}`, `${end} ${formatClock(trip.arrival)}`, ...rides, ...(missed ? [missed] : [])].join('. ');
 }
 
 const styles = StyleSheet.create({

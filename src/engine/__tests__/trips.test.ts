@@ -4,11 +4,14 @@ import { at, journey, quayId, ride, stop, transferWalk, walk } from '@/engine/__
 import type { TripPath } from '@/engine/paths';
 import { groupCallsByStop, ridesOnLeg } from '@/engine/rides';
 import {
+  cardsBestFirst,
   cardsOf,
   hideBeaten,
+  holdsWithMargin,
   isComfortable,
   rankTrips,
   tripsOnPath,
+  tripsOnPaths,
   walkLookup,
   type PlannedTrip,
   type TripCard,
@@ -974,6 +977,79 @@ function tripAt(name: string, departs: string, arrives: string, marginSeconds?: 
 
 const named = (found: PlannedTrip[]) => found.map((trip) => trip.rows.flatMap((row) => (row.kind === 'ride' ? [row.line] : []))[0]);
 
+describe('the cards of the front page, the best one first', () => {
+  const order = (...found: PlannedTrip[]) => named(cardsBestFirst(rankTrips(found)));
+
+  it('has the margin of a best trip when every transfer has a minute or more', () => {
+    expect(holdsWithMargin(tripAt('a', '15:00', '16:00', 60))).toBe(true);
+    expect(holdsWithMargin(tripAt('b', '15:00', '16:00', 59))).toBe(false);
+    expect(holdsWithMargin(tripAt('direct', '15:00', '16:00'))).toBe(true);
+  });
+
+  it('puts the trip that is there first with a minute on every transfer on top, and the rest by when they are there', () => {
+    const risky = tripAt('risky', '15:00', '16:20', 30);
+    const best = tripAt('best', '15:00', '16:30', 100);
+    const later = tripAt('later', '15:00', '16:40', 400);
+    const last = tripAt('last', '15:00', '16:50', 10);
+    // The risky one is there ten minutes before the best, and stands under it.
+    expect(order(later, last, risky, best)).toEqual(['best', 'risky', 'later', 'last']);
+  });
+
+  it('is sorted by when the traveller is there when no trip has a minute on every transfer', () => {
+    expect(order(tripAt('b', '15:00', '16:30', 59), tripAt('a', '15:00', '16:20', 0))).toEqual(['a', 'b']);
+    expect(order()).toEqual([]);
+  });
+
+  it('keeps two cards that are there in the same minute in the same order as the seconds move', () => {
+    // The later start comes first of two that are there at 16:30, whichever is there first by the second.
+    expect(order(tripAt('early', '15:00', '16:30:10'), tripAt('late', '15:05', '16:30:50'))).toEqual(['late', 'early']);
+    expect(order(tripAt('early', '15:00', '16:30:50'), tripAt('late', '15:05', '16:30:10'))).toEqual(['late', 'early']);
+    // A minute apart on the screen, the one that is there first comes first.
+    expect(order(tripAt('early', '15:00', '16:30:59'), tripAt('late', '15:05', '16:31:00'))).toEqual(['early', 'late']);
+  });
+
+  it('counts the start in whole minutes too', () => {
+    // Both start at 15:00 as shown. The seconds of the start do not decide; the larger tightest transfer does.
+    const tighter = tripAt('tighter', '15:00:50', '16:30', 200);
+    const roomier = tripAt('roomier', '15:00:10', '16:30', 400);
+    expect(order(tighter, roomier)).toEqual(['roomier', 'tighter']);
+  });
+
+  it('takes the best among cards that are there in the same minute by the same order', () => {
+    // Both hold. The comfortable one comes first, as within a card.
+    const yellow = tripAt('yellow', '15:05', '16:30:10', 100);
+    const green = tripAt('green', '15:00', '16:30:50', 400);
+    expect(order(yellow, green, tripAt('risky', '15:00', '16:10', 5))).toEqual(['green', 'risky', 'yellow']);
+  });
+
+  describe('within one card', () => {
+    const sameCard = (trip: PlannedTrip): PlannedTrip => ({ ...trip, cardKey: 'same' });
+
+    it('shows a trip with a minute on every transfer before one that is there sooner without', () => {
+      const sooner = sameCard(tripAt('sooner', '15:00', '16:20', 0));
+      const safer = sameCard(tripAt('safer', '15:00', '16:30', 100));
+      const [card] = cardsBestFirst(rankTrips([sooner, safer]));
+
+      expect(named([card])).toEqual(['safer']);
+      expect(named(card.alternatives)).toEqual(['sooner']);
+      // By rank alone the one that is there first is the card.
+      expect(named(cardsOf(rankTrips([sooner, safer])))).toEqual(['sooner']);
+    });
+
+    it('shows the first by rank among those with a minute on every transfer, and when none has it', () => {
+      const first = sameCard(tripAt('first', '15:00', '16:20', 60));
+      const second = sameCard(tripAt('second', '15:00', '16:30', 400));
+      expect(named(cardsBestFirst(rankTrips([second, first])))).toEqual(['first']);
+
+      const risky = sameCard(tripAt('risky', '15:00', '16:20', 10));
+      const riskier = sameCard(tripAt('riskier', '15:00', '16:30', 0));
+      const [card] = cardsBestFirst(rankTrips([riskier, risky]));
+      expect(named([card])).toEqual(['risky']);
+      expect(named(card.alternatives)).toEqual(['riskier']);
+    });
+  });
+});
+
 describe('comfortable transfers', () => {
   it('are those with more than three minutes to spare', () => {
     expect(isComfortable(tripAt('a', '15:00', '16:00', 181))).toBe(true);
@@ -1066,7 +1142,28 @@ describe('hideBeaten', () => {
   it('hides a card with a tight transfer because of a comfortable one, or of another tight one', () => {
     const tight = tripAt('tight', '15:00', '16:30', 100);
     expect(split(tight, tripAt('comfortable', '15:10', '16:30', 400))).toEqual({ shown: ['comfortable'], hidden: ['tight'] });
-    expect(split(tight, tripAt('tightToo', '15:10', '16:30', 50))).toEqual({ shown: ['tightToo'], hidden: ['tight'] });
+    expect(split(tight, tripAt('tightToo', '15:10', '16:30', 70))).toEqual({ shown: ['tightToo'], hidden: ['tight'] });
+  });
+
+  it('does not hide any card because of one with a transfer of less than a minute', () => {
+    const early = tripAt('early', '15:00', '16:30', 100);
+    // It starts later and is there at the same time, but with 59 seconds it may not hold.
+    expect(split(early, tripAt('risky', '15:10', '16:30', 59))).toEqual({ shown: ['risky', 'early'], hidden: [] });
+    expect(split(early, tripAt('holds', '15:10', '16:30', 60))).toEqual({ shown: ['holds'], hidden: ['early'] });
+    // Nor a card without a transfer, nor another risky one.
+    expect(split(tripAt('direct', '15:00', '16:40'), tripAt('risky', '15:10', '16:30', 0))).toEqual({ shown: ['risky', 'direct'], hidden: [] });
+    expect(split(tripAt('riskyToo', '15:00', '16:30', 10), tripAt('risky', '15:10', '16:30', 59))).toEqual({ shown: ['risky', 'riskyToo'], hidden: [] });
+  });
+
+  it('hides a card with a transfer of less than a minute because of one that holds', () => {
+    expect(split(tripAt('risky', '15:00', '16:30', 30), tripAt('holds', '15:10', '16:30', 100))).toEqual({ shown: ['holds'], hidden: ['risky'] });
+  });
+
+  it('shows a card it is told to keep, whatever beats it', () => {
+    const found = cards(tripAt('early', '15:00', '16:30'), tripAt('late', '15:10', '16:30'));
+    const early = found.find((card) => named([card])[0] === 'early');
+    const { shown, hidden } = hideBeaten(found, early);
+    expect({ shown: named(shown), hidden: named(hidden) }).toEqual({ shown: ['late', 'early'], hidden: [] });
   });
 
   it('hides a comfortable card because of another comfortable one', () => {
@@ -1116,5 +1213,146 @@ describe('hideBeaten', () => {
 
   it('gives nothing for no cards', () => {
     expect(hideBeaten([])).toEqual({ shown: [], hidden: [] });
+  });
+});
+
+describe('on board the first vehicle', () => {
+  const path = [ride('50E', birkelandsskiftet, mohlenpris), ride('400, 410', mohlenpris, krokasskiftet)];
+  const calls = [
+    ...journey('50E', '50E', [[birkelandsskiftet, '15:30'], [mohlenpris, '15:57']]),
+    ...journey('410', '410', [[mohlenpris, '16:02'], [krokasskiftet, '16:35']]),
+  ];
+
+  it('does not offer a first vehicle that has left, unless the traveller is on it', () => {
+    expect(trips(path, calls, '15:40')).toEqual([]);
+
+    const [trip] = trips(path, calls, '15:40', {}, { boarded: true });
+    expect(table(trip)).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 5:00']);
+    expect(formatClock(trip.arrival)).toBe('16:35');
+  });
+
+  it('still needs a way on from the vehicle', () => {
+    const gone = calls.map((call) => (call.line === '410' ? { ...call, cancelled: true } : call));
+    expect(trips(path, gone, '15:40', {}, { boarded: true })).toEqual([]);
+  });
+});
+
+describe('with a least transfer time asked for', () => {
+  const path = [ride('50E', birkelandsskiftet, mohlenpris), ride('400, 410', mohlenpris, krokasskiftet)];
+  const calls = [
+    ...journey('50E', '50E', [[birkelandsskiftet, '15:30'], [mohlenpris, '15:58']]),
+    ...journey('a', '410', [[mohlenpris, '15:58:59'], [krokasskiftet, '16:32']]),
+    ...journey('b', '410', [[mohlenpris, '15:59:00'], [krokasskiftet, '16:33']]),
+    ...journey('c', '410', [[mohlenpris, '16:20'], [krokasskiftet, '16:53']]),
+  ];
+
+  it('takes the first departure that leaves that much to spare, to the second', () => {
+    // Without it, the bus 59 seconds after the 50E is the trip.
+    expect(table(trips(path, calls, '15:00')[0])).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 0:59']);
+
+    const [trip] = trips(path, calls, '15:00', {}, { minMarginSeconds: 60 });
+    expect(table(trip)).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 1:00']);
+    expect(formatClock(trip.arrival)).toBe('16:33');
+
+    const [later] = trips(path, calls, '15:00', {}, { minMarginSeconds: 61 });
+    expect(table(later)).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 22:00']);
+  });
+
+  it('gives no trip when no departure leaves that much, and counts before any grace', () => {
+    expect(trips(path, calls, '15:00', {}, { minMarginSeconds: 1321 })).toEqual([]);
+    const [trip] = trips(path, calls, '15:00', {}, { minMarginSeconds: 60, missedGraceSeconds: 60 });
+    expect(table(trip)).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 1:00']);
+  });
+
+  it('asks it of every transfer of the trip', () => {
+    const three = [ride('50E', birkelandsskiftet, mohlenpris), ride('400, 410', mohlenpris, storavatnet), ride('400', storavatnet, krokasskiftet)];
+    const more = [
+      ...journey('50E', '50E', [[birkelandsskiftet, '15:30'], [mohlenpris, '15:58']]),
+      ...journey('on', '410', [[mohlenpris, '16:02'], [storavatnet, '16:15']]),
+      ...journey('tight', '400', [[storavatnet, '16:15:30'], [krokasskiftet, '16:35']]),
+      ...journey('safe', '400', [[storavatnet, '16:35'], [krokasskiftet, '16:55']]),
+    ];
+    expect(table(trips(three, more, '15:00')[0])).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 4:00', '400 Storavatnet 0:30']);
+    expect(table(trips(three, more, '15:00', {}, { minMarginSeconds: 60 })[0])).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris 4:00', '400 Storavatnet 20:00']);
+  });
+});
+
+describe('with a rule of its own for which transfers are taken', () => {
+  const path = [ride('50E', birkelandsskiftet, mohlenpris), ride('400, 410', mohlenpris, krokasskiftet)];
+  const calls = [
+    ...journey('50E', '50E', [[birkelandsskiftet, '15:30'], [mohlenpris, '15:58']]),
+    ...journey('a', '410', [[mohlenpris, '15:57:30'], [krokasskiftet, '16:32']]),
+    ...journey('b', '410', [[mohlenpris, '16:05'], [krokasskiftet, '16:40']]),
+  ];
+
+  it('asks the rule about each transfer, with the two rides and the transfer time', () => {
+    const asked: string[] = [];
+    const [trip] = trips(path, calls, '15:00', {}, {
+      allowTransfer: (from, to, marginSeconds) => {
+        asked.push(`${from.line} → ${to.serviceJourneyId} ${marginSeconds}`);
+        return to.serviceJourneyId === 'journey:a';
+      },
+    });
+    expect(asked).toEqual(['50E → journey:a -30', '50E → journey:b 420']);
+    // The rule took the bus that left half a minute before, and not the one that is caught.
+    expect(table(trip)).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris −0:30']);
+  });
+
+  it('counts before the limits, and gives no trip when the rule takes no transfer', () => {
+    const none = { allowTransfer: () => false, missedGraceSeconds: 60 };
+    expect(trips(path, calls, '15:00', {}, none)).toEqual([]);
+    const all = { allowTransfer: () => true, minMarginSeconds: 600 };
+    expect(table(trips(path, calls, '15:00', {}, all)[0])).toEqual(['50E Birkelandsskiftet', '410 Møhlenpris −0:30']);
+  });
+});
+
+describe('what a missed transfer costs', () => {
+  const adlandsflaten = stop('Ådlandsflaten');
+  const lightRail = ride('1', busstasjonen, birkelandsskiftet, 'tram');
+  // From Birkelandsskiftet the traveller walks, or takes the 56 two stops and walks from there.
+  const walking: TripPath = toAddress([ride('400', krokasskiftet, busstasjonen), lightRail, walk(birkelandsskiftet, work, 1200)], 1);
+  const byBus: TripPath = toAddress(
+    [ride('400', krokasskiftet, busstasjonen), lightRail, ride('56', birkelandsskiftet, adlandsflaten), walk(adlandsflaten, work, 660)],
+    2,
+  );
+  const calls = [
+    ...journey('400', '400', [[krokasskiftet, '07:09'], [busstasjonen, '07:48']]),
+    ...journey('1-a', '1', [[busstasjonen, '07:50'], [birkelandsskiftet, '08:24']]),
+    ...journey('1-b', '1', [[busstasjonen, '07:55'], [birkelandsskiftet, '08:29']]),
+    ...journey('56', '56', [[birkelandsskiftet, '08:31'], [adlandsflaten, '08:36']]),
+  ];
+  const all = (paths: TripPath[]) => {
+    const byStop = groupCallsByStop(calls);
+    return tripsOnPaths(paths, (leg) => ridesOnLeg(leg, byStop), walkLookup({ transferWalks: [], walkOverrides: {} }), new Date(at('07:00')));
+  };
+  const ifMissed = (trip: PlannedTrip) =>
+    trip.rows.flatMap((row) => (row.kind === 'ride' && row.transfer ? [row.transfer.arrivalIfMissed && formatClock(row.transfer.arrivalIfMissed)] : []));
+
+  it('is the next departure along the path, when there is only that path', () => {
+    const [trip] = all([walking]);
+    expect(formatClock(trip.arrival)).toBe('08:44');
+    // The next light rail is at Birkelandsskiftet at 08:29, twenty minutes from work.
+    expect(ifMissed(trip)).toEqual(['08:49']);
+  });
+
+  it('is the next possible trip onward by any path that has come the same way', () => {
+    const [onFoot, onThe56] = all([walking, byBus]);
+
+    // The first light rail is too early for the 56 to be of use: both trips are there at 08:44 or later.
+    expect(formatClock(onFoot.arrival)).toBe('08:44');
+    expect(formatClock(onThe56.arrival)).toBe('08:47');
+    // After the next light rail the 56 is there at 08:47, before the walk at 08:49. That holds whichever trip was planned.
+    expect(ifMissed(onFoot)).toEqual(['08:47']);
+    // Missing the 56, the last one, leaves the walk from Birkelandsskiftet, which the other path makes: 08:24 and twenty minutes.
+    expect(ifMissed(onThe56)).toEqual(['08:47', '08:44']);
+  });
+
+  it('does not count a path that has come another way to the stop', () => {
+    const other: TripPath = toAddress(
+      [ride('410', krokasskiftet, busstasjonen), lightRail, ride('56', birkelandsskiftet, adlandsflaten), walk(adlandsflaten, work, 660)],
+      2,
+    );
+    const [onFoot] = all([walking, other]);
+    expect(ifMissed(onFoot)).toEqual(['08:49']);
   });
 });

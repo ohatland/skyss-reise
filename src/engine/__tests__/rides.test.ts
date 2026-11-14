@@ -128,6 +128,29 @@ describe('ridesOnLeg', () => {
       }
     });
 
+    it('keeps the one that is under way when Entur has flagged both, whichever comes first', () => {
+      // As seen on 14 November 2026: the journey that does not report keeps the flag and the timetable.
+      const silent = twin('silent', { started: false });
+      const underWay = twin('under-way', {}, '07:30:31');
+
+      for (const calls of [[...silent, ...underWay], [...underWay, ...silent]]) {
+        const found = rides(calls);
+        expect(found.map((r) => r.serviceJourneyId)).toEqual(['journey:under-way']);
+        expect(found[0]).toMatchObject({ started: true, boarding: { expected: at('07:30:31') }, alighting: { expected: at('07:53:10') } });
+      }
+    });
+
+    it('keeps the one that is under way before one that only has the flag', () => {
+      const flagged = twin('flagged', { started: false });
+      const underWay = twin('under-way', { realtime: false });
+      expect(rides([...flagged, ...underWay]).map((r) => r.serviceJourneyId)).toEqual(['journey:under-way']);
+    });
+
+    it('keeps the first when both are flagged and neither has started', () => {
+      const found = rides([...twin('one', { started: false }), ...twin('two', { started: false })]);
+      expect(found.map((r) => r.serviceJourneyId)).toEqual(['journey:one']);
+    });
+
     it('keeps one when neither has real-time data', () => {
       const found = rides([
         ...twin('one', { realtime: false, started: false }),

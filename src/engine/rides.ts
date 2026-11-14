@@ -42,9 +42,14 @@ export function isLive(ride: Ride): boolean {
 /** The light rail and the boats keep their timetable. Entur has no real-time data for the light rail, and none is needed. */
 const PRECISE_MODES = new Set(['tram', 'water']);
 
+/** True for light rail and boat, whose timetable is taken as exact where there is no live forecast. */
+export function keepsTimetable(mode: string): boolean {
+  return PRECISE_MODES.has(mode);
+}
+
 /** True when the ride has no live forecast but runs so regularly that the timetable is taken as exact. */
 export function isPrecise(ride: Ride): boolean {
-  return !isLive(ride) && PRECISE_MODES.has(ride.mode);
+  return !isLive(ride) && keepsTimetable(ride.mode);
 }
 
 /** The calls fetched from Entur, by the stop place they are at. */
@@ -66,6 +71,15 @@ const ms = (time: string) => new Date(time).getTime();
 interface Pair {
   boarding: StopCall;
   alighting: StopCall;
+}
+
+/**
+ * How well a journey is known to be the one the vehicle reports as: under way,
+ * then flagged by Entur as having real-time data, then neither.
+ */
+function reporting({ boarding }: Pair): number {
+  if (boarding.started) return 2;
+  return boarding.realtime ? 1 : 0;
 }
 
 function toRide({ boarding, alighting }: Pair, leg: TransitLeg): Ride {
@@ -106,9 +120,10 @@ function toRide({ boarding, alighting }: Pair, leg: TransitLeg): Ride {
  * alighting is not allowed, give no ride.
  *
  * Entur at times lists the same timetabled departure as two journeys, of which
- * only one gets real-time updates. The one without would stay on time when the
- * vehicle is late, so of two rides with the same line, platforms and timetable
- * only the one with real-time data is kept.
+ * only one reports once the vehicle is under way. The other stays on the
+ * timetable however late the vehicle is, with Entur's real-time flag still
+ * set. Of two rides with the same line, platforms and timetable only one is
+ * kept: the one that is under way, otherwise the one with real-time data.
  */
 export function ridesOnLeg(leg: TransitLeg, calls: CallsByStop): Ride[] {
   const lines = new Set(leg.lines);
@@ -143,7 +158,7 @@ export function ridesOnLeg(leg: TransitLeg, calls: CallsByStop): Ride[] {
       ms(alighting.aimedArrival),
     ].join('|');
     const known = byTimetable.get(key);
-    if (!known || (boarding.realtime && !known.boarding.realtime)) byTimetable.set(key, pair);
+    if (!known || reporting(pair) > reporting(known)) byTimetable.set(key, pair);
   }
 
   return [...byTimetable.values()]

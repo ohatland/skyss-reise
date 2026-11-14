@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { REFRESH_INTERVAL_MS } from '@/config';
 import { planTrips, type TripPlan } from '@/engine/plan';
+import type { TransferMemory } from '@/engine/transfers';
 import { log } from '@/logging/logger';
 import type { TripTypeId } from '@/model/types';
 import { loadRoutes } from '@/storage/alternatives';
@@ -53,12 +54,16 @@ function useActive(): boolean {
  * nothing blinks while fetching, and stays with a failure flag when a fetch
  * fails. What is known for the other trip type is kept, so switching back
  * shows it at once while it is refreshed.
+ *
+ * What each plan leaves to remember is passed on to the next plan of the same
+ * trip type, so that a card whose transfer was given up does not come and go.
  */
 export function useTripPlan(tripType: TripTypeId): TripPlanState {
   const active = useActive();
   const [known, setKnown] = useState<Partial<Record<TripTypeId, Known>>>({});
   const [settled, setSettled] = useState<Partial<Record<TripTypeId, boolean>>>({});
   const controller = useRef<AbortController | null>(null);
+  const memory = useRef<Partial<Record<TripTypeId, TransferMemory>>>({});
 
   const refresh = useCallback(() => {
     controller.current?.abort();
@@ -77,7 +82,12 @@ export function useTripPlan(tripType: TripTypeId): TripPlanState {
         update({ plan: null, noRoutes: true, failed: false });
         return;
       }
-      const plan = await planTrips(tripType, new Date(), { routes, entur: { signal: current.signal } });
+      const plan = await planTrips(tripType, new Date(), {
+        routes,
+        entur: { signal: current.signal },
+        memory: memory.current[tripType],
+      });
+      if (!current.signal.aborted) memory.current[tripType] = plan.memory;
       update({ plan, noRoutes: false, failed: false });
     })().catch((error: unknown) => {
       if (current.signal.aborted) return;

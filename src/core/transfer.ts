@@ -4,10 +4,23 @@ import { secondsBetween } from '@/core/time';
 export const COMFORTABLE_MARGIN_SECONDS = 180;
 
 /**
- * A transfer that is missed by less than this stays on the card in red,
+ * A transfer that is missed by less than this is shown on a card in red,
  * since it may still be caught. Beyond it the card moves to the next departure.
  */
 export const MISSED_GRACE_SECONDS = 60;
+
+/**
+ * A transfer that has been shown stays on its card, in red, until it is
+ * missed by more than this. A forecast far ahead moves by more than a minute,
+ * and a card that goes and then comes back is worse than one that stays red.
+ */
+export const MISSED_GIVE_UP_SECONDS = 180;
+
+/**
+ * The transfer time every change of the best trip should have. The traveller
+ * put it as "an acceptable margin on the transfer (typically 1+ min)".
+ */
+export const PLAN_MIN_MARGIN_SECONDS = 60;
 
 export type MarginStatus = 'good' | 'tight' | 'missed';
 

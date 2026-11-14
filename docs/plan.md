@@ -167,6 +167,13 @@ Status 14. november 2026:
 - Gjort senere samme dag: forsiden (`src/app/index.tsx`, `src/components/trip-card.tsx`, `src/hooks/use-trip-plan.ts`) etter den godkjente skissen, med oppdatering hvert 30. sekund og «Vis flere». Prøvd i nettleser mot Entur for begge reisetyper.
 - Gjenstår: prøve på telefon og i rushtid med ekte forsinkelser. «Merk»-knappen og knappen som starter om bord-modus kommer med resten av fase 2 og fase 5.
 
+Endret 14. november 2026 (kveld), sammen med om bord-logikken på grenen `fase-5-om-bord-logikk`:
+
+- Kort blir stående på forsiden: et bytte som faller under ett minutt eller går inntil tre minutter i minus, fjerner ikke kortet (ett minutt for et bytte som ikke har vært vist). Et kort som er fjernet, kommer ikke tilbake før overgangstiden er 0:00 eller bedre. `planTrips` tar imot og gir tilbake det som må huskes (`memory`), og `use-trip-plan.ts` holder på det per reisetype.
+- Den beste øverst: tidligst fremme blant reisene med minst ett minutt på alle bytter. Resten sortert på ankomst, i hele minutter.
+- Røde kort viser «Rekker du den ikke: fremme HH:MM».
+- Reglene står i `docs/design/for-avreise.md`. `missedGraceSeconds` er ikke lenger et valg på `planTrips`.
+
 ### Fase 5: Om bord-modus
 
 - Velge buss og følge den.
@@ -176,6 +183,23 @@ Status 14. november 2026:
 - Turrapport fra loggen: hva appen anbefalte, hva som ble valgt, og hva som faktisk skjedde.
 
 Ferdig når en hel reise til jobb med tre–fire bytter er gjennomført med appen, og turrapporten kan leses etterpå.
+
+Status 14. november 2026:
+
+- Gjort: logikken for om bord, uten skjerm (`src/onboard`, `src/entur/journey.ts`), med tester, kjørt mot Entur på busser som var underveis, for begge reisetyper. Inngangen er `followVehicle(tripType, following, now)`. Den gir kjøretøyet (linje, destinasjon, forventet ankomst til hver holdeplass videre der brukeren kan bytte) og alle reiser videre som kort, med planen først og resten sortert på ankomst dør til dør. Første rad i hver reise er kjøretøyet brukeren sitter på.
+- Tapt bytte: motorens `missedGraceSeconds` er ett minutt om bord. «Rekker du den ikke: fremme HH:MM» regnes nå fra neste mulige reise videre uansett vei (også gange), ikke bare neste avgang på samme vei.
+- Bytte av kjøretøy: appen kaller `followVehicle` på nytt med det nye kjøretøyet. `nextVehicleOf(kort, kjøretøy)` gir neste kjøretøy i et kort. `gotOffAt` holder på reisene videre fra holdeplassen mens brukeren venter der.
+- Turlogg (`src/onboard/trip-log.ts`): `startLog`, `observe`, `finishLog` og `tripReport` gir data til turrapporten: rutetid mot faktisk tid per kjøretøy, vist overgangstid (første og siste gang) mot faktisk per bytte, bytter som røk, og ankomst mot første anslag.
+- Entur lister noen avganger som to turer, der bare den ene rapporterer etter start. Den andre står på rutetiden og får «faktisk ankomst» lik rutetiden, men aldri faktisk avgang. `followVehicle` bytter til turen som rapporterer, og `plan.following` sier hvilken det er.
+- Gjenstår: skjermen med spørsmålene, knappen som starter om bord fra forsiden, oppdatering hvert 20.–30. sekund, lagring av økten og turloggen, reservesøk hos Entur, turrapportskjermen og gjenkjenning med GPS og hastighet.
+- Avgjort av brukeren samme dag, og lagt inn i logikken (reglene står i `docs/design/om-bord.md` under «Avgjort 14. november 2026»):
+  - Aktiv plan: tidligst fremme blant reisene der hvert bytte har minst ett minutt. `plan.activePlan` er planen og står først i `plan.trips`. Kort som er fremme mer enn 30 minutter etter planen, ligger i `plan.hidden`.
+  - Appen spør «Gikk du av på {holdeplass}?» og «Er du på {linje} nå?». `src/onboard/session.ts` holder tilstanden: `startSession`, `refresh` (gir plan og aktuelt spørsmål) og `answer` (svar som hendelse med kilde).
+  - Turrapporten holder det som skjedde opp mot planen ved påstigning (`report.plan`).
+  - GPS og hastighet skal senere svare på spørsmålene. Ikke bygget.
+  - Appen holder på planen: den byttes bare når en annen reise som holder, er et helt minutt tidligere fremme, eller når planen ikke holder lenger. `plan.planReason` sier hvorfor planen er den den er.
+  - Et bytte som har vært vist og så er tapt med mer enn tre minutter, kommer ikke tilbake før overgangstiden er 0:00 eller bedre. Økten husker dette (`session.memory`).
+- Rettet i motoren samme dag: `ridesOnLeg` velger turen som er underveis når Entur lister samme avgang som to turer. Nye i motoren: `minMarginSeconds`, som brukes til å finne den beste reisen, og `allowTransfer`, som brukes til å holde bytter som er gitt opp, ute. Forsiden bruker dem også, se under fase 4.
 
 ### Fase 6: Trafikkbilde
 
