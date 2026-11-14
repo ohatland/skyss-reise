@@ -1,8 +1,10 @@
 import { osloIso } from '@/core/oslo-time';
 import { log } from '@/logging/logger';
-import { mergePatterns, mergeTransferWalks, toPattern, type TripPattern } from '@/mapping/pattern';
+import { asPlace, linesBetween } from '@/mapping/direct';
+import { LOOKUP_WINDOW_MINUTES, lookupTimes, stretches, withLegLines, type LegLines } from '@/mapping/lines';
+import { mergePatterns, mergeTransferWalks, sortLines, toPattern, type TripPattern } from '@/mapping/pattern';
 import type { TripPatternResponse, TripSearchParams } from '@/mapping/query';
-import type { MappedAlternative, StopRef, TransferWalk, TripType } from '@/model/types';
+import { walkKey, type MappedAlternative, type StopRef, type TransferWalk, type TripType } from '@/model/types';
 
 export interface MappingConfig {
   tripType: TripType;
@@ -31,6 +33,8 @@ export interface MappingResult {
   failedSearches: number;
   /** Lines the run chose to search without, as line ids. */
   bannedLines: string[];
+  /** The lines looked up on each stretch, kept so that a later search only looks up new stretches. */
+  legLines: LegLines;
 }
 
 type Variant = Omit<TripSearchParams, 'from' | 'to' | 'dateTime'>;
@@ -67,7 +71,11 @@ export function dominantLines(patterns: TripPattern[], count: number, tripType: 
     .map(([lineId]) => lineId);
 }
 
-/** The most searches a run makes. A pass that would repeat another is skipped, so it can be fewer. */
+/**
+ * The most searches a run makes to find trips. A pass that would repeat another
+ * is skipped, so it can be fewer. Looking up the lines on each stretch comes on
+ * top, and how many searches that takes is not known until the trips are found.
+ */
 export function totalSearches(config: Pick<MappingConfig, 'times' | 'viaStops'>): number {
   return config.times.length * (BASE_VARIANTS.length + BANNED_LINE_PASSES + config.viaStops.length);
 }
@@ -83,17 +91,64 @@ async function inParallel<T>(tasks: (() => Promise<T>)[], concurrency: number): 
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
 }
 
+interface Progress {
+  done: number;
+  total: number;
+  failed: number;
+}
+
+/**
+ * Looks up which lines ride directly on every stretch not looked up before, at
+ * times spread through the window. The suggestions alone do not show it: a line
+ * is missing from a stretch whenever no search happened to prefer it.
+ * A stretch where every search failed is left to be looked up again later.
+ */
+async function lookUpLines(
+  alternatives: MappedAlternative[],
+  known: LegLines,
+  { date, times }: Pick<MappingConfig, 'date' | 'times'>,
+  deps: MappingDeps,
+  progress: Progress,
+): Promise<LegLines> {
+  const todo = stretches(alternatives).filter((leg) => !(walkKey(leg.from, leg.to) in known));
+  const at = lookupTimes(times);
+  progress.total += todo.length * at.length;
+  deps.onProgress?.(progress.done, progress.total);
+
+  const found = new Map<string, string[]>();
+  const tasks = todo.flatMap((leg) =>
+    at.map((time) => async () => {
+      const key = walkKey(leg.from, leg.to);
+      try {
+        const trips = await deps.search({
+          from: asPlace(leg.from),
+          to: asPlace(leg.to),
+          dateTime: osloIso(date, time),
+          searchWindowMinutes: LOOKUP_WINDOW_MINUTES,
+        });
+        found.set(key, [...(found.get(key) ?? []), ...linesBetween(trips, leg.from, leg.to)]);
+      } catch {
+        progress.failed++;
+      }
+      progress.done++;
+      deps.onProgress?.(progress.done, progress.total);
+    }),
+  );
+  await inParallel(tasks, deps.concurrency ?? 3);
+
+  return { ...known, ...Object.fromEntries([...found].map(([key, lines]) => [key, sortLines(lines)])) };
+}
+
 /**
  * Finds as many ways of making the trip as it can: searches the whole window
  * several ways, then again without the lines that keep coming up, then through
- * each via stop. A failed search is skipped and counted, not fatal.
+ * each via stop. Last it looks up the lines on every stretch of what it found.
+ * A failed search is skipped and counted, not fatal.
  */
 export async function runMapping(config: MappingConfig, deps: MappingDeps): Promise<MappingResult> {
   const { tripType, date, times, viaStops } = config;
-  let total = totalSearches(config);
+  const progress: Progress = { done: 0, total: totalSearches(config), failed: 0 };
   const patterns: TripPattern[] = [];
-  let done = 0;
-  let failed = 0;
 
   const runPass = async (variants: Variant[]) => {
     const tasks = variants.flatMap((variant) =>
@@ -110,10 +165,10 @@ export async function runMapping(config: MappingConfig, deps: MappingDeps): Prom
             if (pattern) patterns.push(pattern);
           }
         } catch {
-          failed++;
+          progress.failed++;
         }
-        done++;
-        deps.onProgress?.(done, total);
+        progress.done++;
+        deps.onProgress?.(progress.done, progress.total);
       }),
     );
     await inParallel(tasks, deps.concurrency ?? 3);
@@ -123,28 +178,32 @@ export async function runMapping(config: MappingConfig, deps: MappingDeps): Prom
 
   // With fewer dominant lines than passes, the passes left would repeat a search already made.
   const banned = dominantLines(patterns, BANNED_LINE_PASSES, tripType);
-  total -= (BANNED_LINE_PASSES - banned.length) * times.length;
-  deps.onProgress?.(done, total);
+  progress.total -= (BANNED_LINE_PASSES - banned.length) * times.length;
+  deps.onProgress?.(progress.done, progress.total);
   await runPass(banned.map((_, i) => ({ bannedLines: banned.slice(0, i + 1) })));
 
   await runPass(viaStops.map((stop) => ({ viaStopPlaceId: stop.id })));
 
-  const alternatives = patterns.length ? mergePatterns(patterns, tripType) : [];
+  const merged = patterns.length ? mergePatterns(patterns, tripType) : [];
+  const legLines = await lookUpLines(merged, {}, config, deps, progress);
+  const alternatives = withLegLines(merged, legLines);
   log.event('mapping_run', {
     tripType: tripType.id,
-    searches: total,
-    failed,
+    searches: progress.total,
+    failed: progress.failed,
     patterns: patterns.length,
     alternatives: alternatives.length,
+    stretches: Object.keys(legLines).length,
   });
 
   return {
     alternatives,
     transferWalks: mergeTransferWalks(patterns),
     patterns,
-    searches: total,
-    failedSearches: failed,
+    searches: progress.total,
+    failedSearches: progress.failed,
     bannedLines: banned,
+    legLines,
   };
 }
 
@@ -160,8 +219,7 @@ export async function extendWithVia(
 ): Promise<MappingResult> {
   const { tripType, date, times } = config;
   const patterns = [...previous.patterns];
-  let done = 0;
-  let failed = 0;
+  const progress: Progress = { done: 0, total: times.length, failed: 0 };
 
   const tasks = times.map((time) => async () => {
     try {
@@ -176,20 +234,24 @@ export async function extendWithVia(
         if (pattern) patterns.push(pattern);
       }
     } catch {
-      failed++;
+      progress.failed++;
     }
-    done++;
-    deps.onProgress?.(done, times.length);
+    progress.done++;
+    deps.onProgress?.(progress.done, progress.total);
   });
   await inParallel(tasks, deps.concurrency ?? 3);
 
-  log.event('mapping_via', { tripType: tripType.id, searches: times.length, failed });
+  const merged = patterns.length ? mergePatterns(patterns, tripType) : [];
+  const legLines = await lookUpLines(merged, previous.legLines, config, deps, progress);
+
+  log.event('mapping_via', { tripType: tripType.id, searches: progress.total, failed: progress.failed });
   return {
     ...previous,
-    alternatives: patterns.length ? mergePatterns(patterns, tripType) : [],
+    alternatives: withLegLines(merged, legLines),
     transferWalks: mergeTransferWalks(patterns),
     patterns,
-    searches: previous.searches + times.length,
-    failedSearches: previous.failedSearches + failed,
+    searches: previous.searches + progress.total,
+    failedSearches: previous.failedSearches + progress.failed,
+    legLines,
   };
 }

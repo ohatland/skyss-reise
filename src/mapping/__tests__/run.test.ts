@@ -23,6 +23,10 @@ const M: [string, string] = ['NSR:StopPlace:30918', 'Møhlenpris'];
 const S: [string, string] = ['NSR:StopPlace:58538', 'Sandslivegen'];
 const K: [string, string] = ['NSR:StopPlace:32541', 'Krokåsskiftet'];
 
+/** The searches that look for trips, as opposed to the lookups of lines on a stretch. */
+const tripSearches = (calls: TripSearchParams[]) => calls.filter((c) => !c.searchWindowMinutes);
+const lineLookups = (calls: TripSearchParams[]) => calls.filter((c) => c.searchWindowMinutes);
+
 const trip = (minutes: number, legs: ReturnType<typeof leg>[]): TripPatternResponse => ({
   duration: minutes * 60,
   aimedStartTime: '',
@@ -81,6 +85,11 @@ describe('buildTripQuery', () => {
     expect(query).toContain('ignoreRealtimeUpdates: true');
     expect(query).not.toContain('banned');
     expect(query).not.toContain('via');
+  });
+
+  it('looks twenty minutes ahead unless told otherwise', () => {
+    expect(buildTripQuery(base)).toContain('searchWindow: 20,');
+    expect(buildTripQuery({ ...base, searchWindowMinutes: 60 })).toContain('searchWindow: 60,');
   });
 
   it('can ask for walking the whole way', () => {
@@ -148,10 +157,12 @@ describe('runMapping', () => {
 
     // At most 14; one pass is skipped, since only 50E can be searched without.
     expect(totalSearches(config)).toBe(14);
-    expect(calls).toHaveLength(12);
-    expect(result.searches).toBe(12);
-    expect(progress[progress.length - 1]).toEqual([12, 12]);
-    expect(calls.every((c) => c.from === WORK && c.to === HOME)).toBe(true);
+    expect(tripSearches(calls)).toHaveLength(12);
+    // Then one lookup for each of the two stretches.
+    expect(lineLookups(calls)).toHaveLength(2);
+    expect(result.searches).toBe(14);
+    expect(progress[progress.length - 1]).toEqual([14, 14]);
+    expect(tripSearches(calls).every((c) => c.from === WORK && c.to === HOME)).toBe(true);
     expect(new Set(calls.map((c) => c.dateTime))).toEqual(
       new Set(['2026-11-16T15:00:00+01:00', '2026-11-16T15:20:00+01:00']),
     );
@@ -210,10 +221,10 @@ describe('runMapping', () => {
       },
     );
 
-    expect(calls).toHaveLength(6);
+    expect(tripSearches(calls)).toHaveLength(6);
     expect(calls.some((c) => c.bannedLines)).toBe(false);
-    expect(result.searches).toBe(6);
-    expect(progress[progress.length - 1]).toEqual([6, 6]);
+    expect(result.searches).toBe(7);
+    expect(progress[progress.length - 1]).toEqual([7, 7]);
   });
 
   it('runs no more searches at once than the limit', async () => {
@@ -275,10 +286,86 @@ describe('runMapping', () => {
       },
     });
 
-    expect(calls).toHaveLength(config.times.length);
-    expect(calls.every((c) => c.viaStopPlaceId === 'NSR:StopPlace:58538')).toBe(true);
-    expect(extended.searches).toBe(first.searches + config.times.length);
+    expect(tripSearches(calls)).toHaveLength(config.times.length);
+    expect(tripSearches(calls).every((c) => c.viaStopPlaceId === 'NSR:StopPlace:58538')).toBe(true);
+    // Only the two new stretches are looked up; the ones from the first run are known.
+    expect(lineLookups(calls).map((c) => [c.from.stopPlaceId, c.to.stopPlaceId])).toEqual([
+      [B[0], S[0]],
+      [S[0], K[0]],
+    ]);
+    expect(extended.searches).toBe(first.searches + config.times.length + 2);
     expect(extended.alternatives.map((a) => a.group).sort()).toEqual(['Via Møhlenpris', 'Via Sandslivegen']);
     expect(first.alternatives).toHaveLength(1);
+  });
+
+  describe('lines on each stretch', () => {
+    const toWork = { ...config, tripType: TRIP_TYPES.toWork, times: ['06:30', '06:50', '07:10', '07:30'], viaStops: [] };
+    const found = [trip(60, [leg('400', K, M), leg('50E', M, B)])];
+    const isLookup = (params: TripSearchParams, from: [string, string], to: [string, string]) =>
+      Boolean(params.searchWindowMinutes) && params.from.stopPlaceId === from[0] && params.to.stopPlaceId === to[0];
+
+    it('adds the lines that ride a stretch directly but that no suggestion used', async () => {
+      const calls: TripSearchParams[] = [];
+      const result = await runMapping(toWork, {
+        search: async (params) => {
+          calls.push(params);
+          if (isLookup(params, K, M)) return [trip(20, [leg('400', K, M)]), trip(25, [leg('410', K, M)])];
+          if (isLookup(params, M, B)) return [trip(30, [leg('50E', M, B)]), trip(50, [leg('3', M, S), leg('1', S, B)])];
+          return found;
+        },
+      });
+
+      expect(result.alternatives).toHaveLength(1);
+      expect(result.alternatives[0].legs.map((l) => (l.kind === 'transit' ? l.lines : []))).toEqual([
+        ['400', '410'],
+        ['50E'],
+      ]);
+      expect(result.legLines).toEqual({ [`${K[0]}>${M[0]}`]: ['400', '410'], [`${M[0]}>${B[0]}`]: ['50E'] });
+    });
+
+    it('looks up between the stops themselves, an hour at a time through the window', async () => {
+      const calls: TripSearchParams[] = [];
+      await runMapping(toWork, {
+        search: async (params) => {
+          calls.push(params);
+          return found;
+        },
+      });
+
+      const lookups = lineLookups(calls).filter((c) => c.from.stopPlaceId === K[0]);
+      expect(lookups.every((c) => c.to.stopPlaceId === M[0] && c.searchWindowMinutes === 60)).toBe(true);
+      expect(lookups.map((c) => c.dateTime).sort()).toEqual(['2026-11-16T06:30:00+01:00', '2026-11-16T07:30:00+01:00']);
+      expect(lookups.some((c) => c.bannedLines || c.viaStopPlaceId)).toBe(false);
+    });
+
+    it('keeps the lines from the suggestions when a lookup fails, and counts the failure', async () => {
+      const result = await runMapping(toWork, {
+        search: async (params) => {
+          if (params.searchWindowMinutes) throw new Error('nettverksfeil');
+          return found;
+        },
+      });
+
+      expect(result.alternatives[0].legs.map((l) => (l.kind === 'transit' ? l.lines : []))).toEqual([['400'], ['50E']]);
+      expect(result.failedSearches).toBe(4);
+      expect(result.legLines).toEqual({});
+    });
+
+    it('a later via search looks up again the stretches whose lookups failed', async () => {
+      const first = await runMapping(toWork, {
+        search: async (params) => {
+          if (params.searchWindowMinutes) throw new Error('nettverksfeil');
+          return found;
+        },
+      });
+      const extended = await extendWithVia(first, toWork, { id: S[0], name: S[1] }, {
+        search: async (params) => (isLookup(params, K, M) ? [trip(25, [leg('410', K, M)])] : found),
+      });
+
+      expect(extended.alternatives[0].legs.map((l) => (l.kind === 'transit' ? l.lines : []))).toEqual([
+        ['400', '410'],
+        ['50E'],
+      ]);
+    });
   });
 });

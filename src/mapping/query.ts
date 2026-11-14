@@ -8,6 +8,8 @@ import type { Place } from '@/model/types';
  */
 export const TICKET_AUTHORITIES = ['SKY:Authority:SKY', 'VYG:Authority:VYT'];
 
+const DEFAULT_SEARCH_WINDOW_MINUTES = 20;
+
 export interface TripSearchParams {
   from: Place;
   to: Place;
@@ -24,6 +26,8 @@ export interface TripSearchParams {
   viaStopPlaceId?: string;
   /** Walk the whole way instead of using public transport. */
   onFoot?: boolean;
+  /** How long after dateTime departures are looked for. Twenty minutes unless set. */
+  searchWindowMinutes?: number;
 }
 
 export interface TripLegResponse {
@@ -71,7 +75,7 @@ export function buildTripQuery(params: TripSearchParams): string {
     `to: ${location(params.to)}`,
     `dateTime: ${JSON.stringify(params.dateTime)}`,
     'numTripPatterns: 25',
-    'searchWindow: 20',
+    `searchWindow: ${params.searchWindowMinutes ?? DEFAULT_SEARCH_WINDOW_MINUTES}`,
     'ignoreRealtimeUpdates: true',
     `whiteListed: {authorities: ${JSON.stringify(TICKET_AUTHORITIES)}}`,
   ];

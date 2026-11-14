@@ -1,6 +1,6 @@
 import { toStopHits } from '@/entur/stops';
 import { setLogSinks } from '@/logging/logger';
-import { findDirectLeg, findWalkSeconds } from '@/mapping/direct';
+import { findDirectLeg, findWalkSeconds, linesBetween } from '@/mapping/direct';
 import type { TripLegResponse, TripPatternResponse, TripSearchParams } from '@/mapping/query';
 import { HOME, WORK } from '@/model/places';
 import type { StopRef } from '@/model/types';
@@ -167,5 +167,24 @@ describe('toStopHits', () => {
       { id: 'NSR:StopPlace:29485', name: 'Grana', label: 'Grana, Bergen' },
       { id: 'NSR:StopPlace:35441', name: 'Grane', label: 'Grane' },
     ]);
+  });
+});
+
+describe('linesBetween', () => {
+  it('takes the lines that ride the whole way between exactly the two stops', () => {
+    const trips = [
+      trip([ride('50E', busStop, mohlenpris)]),
+      trip([ride('51', busStop, mohlenpris)]),
+      trip([ride('50E', busStop, mohlenpris)]),
+      // With a change on the way, and from the other stop of the terminal: other stretches.
+      trip([ride('51', busStop, dolvik), ride('23', dolvik, mohlenpris)]),
+      trip([ride('1', searchedBirkelandsskiftet, mohlenpris)]),
+    ];
+    expect(linesBetween(trips, busStop, mohlenpris)).toEqual(['50E', '51']);
+  });
+
+  it('finds none when nothing rides directly', () => {
+    expect(linesBetween([trip([ride('51', busStop, dolvik), ride('23', dolvik, mohlenpris)])], busStop, mohlenpris)).toEqual([]);
+    expect(linesBetween([], busStop, mohlenpris)).toEqual([]);
   });
 });

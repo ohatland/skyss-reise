@@ -1,7 +1,7 @@
 import { osloIso } from '@/core/oslo-time';
 import { sortLines, toPattern } from '@/mapping/pattern';
 import type { TripPatternResponse, TripSearchParams } from '@/mapping/query';
-import type { Place, StopRef, TransitLeg } from '@/model/types';
+import { walkKey, type Place, type StopRef, type TransitLeg } from '@/model/types';
 
 type Search = (params: TripSearchParams) => Promise<TripPatternResponse[]>;
 
@@ -14,7 +14,28 @@ export interface DirectDeps {
 /** Morning, midday and afternoon, so that lines running only part of the day are found. */
 const SAMPLE_TIMES = ['07:00', '12:00', '16:00'];
 
-const asPlace = (stop: StopRef): Place => ({ id: stop.id, name: stop.name, stopPlaceId: stop.id });
+export const asPlace = (stop: StopRef): Place => ({ id: stop.id, name: stop.name, stopPlaceId: stop.id });
+
+/** The rides in the answers that go the whole way on one vehicle, by the stops Entur uses for them. */
+function directRides(trips: TripPatternResponse[], origin: Place, destination: Place): Map<string, TransitLeg[]> {
+  const rides = new Map<string, TransitLeg[]>();
+  for (const trip of trips) {
+    const legs = toPattern(trip, origin, destination)?.legs ?? [];
+    if (legs.length !== 1 || legs[0].kind !== 'transit') continue;
+    const key = walkKey(legs[0].from, legs[0].to);
+    rides.set(key, [...(rides.get(key) ?? []), legs[0]]);
+  }
+  return rides;
+}
+
+/**
+ * The lines in the answers that ride directly between exactly these two stops.
+ * A ride from another stop of the same terminal is a different stretch and is left out.
+ */
+export function linesBetween(trips: TripPatternResponse[], from: StopRef, to: StopRef): string[] {
+  const rides = directRides(trips, asPlace(from), asPlace(to)).get(walkKey(from, to)) ?? [];
+  return sortLines(rides.flatMap((leg) => leg.lines));
+}
 
 /**
  * The direct ride between two stops, with every line that makes it, or null when
@@ -36,13 +57,7 @@ export async function findDirectLeg(from: StopRef, to: StopRef, deps: DirectDeps
   const answers = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
   const failure = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
 
-  const rides = new Map<string, TransitLeg[]>();
-  for (const trip of answers.flat()) {
-    const legs = toPattern(trip, origin, destination)?.legs ?? [];
-    if (legs.length !== 1 || legs[0].kind !== 'transit') continue;
-    const key = `${legs[0].from.id}>${legs[0].to.id}`;
-    rides.set(key, [...(rides.get(key) ?? []), legs[0]]);
-  }
+  const rides = directRides(answers.flat(), origin, destination);
   if (rides.size === 0) {
     if (failure) throw failure.reason;
     return null;

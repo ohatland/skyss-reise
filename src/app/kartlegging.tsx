@@ -245,8 +245,8 @@ export default function MappingScreen() {
 
           <Text style={[styles.body, secondary, { marginTop: Spacing.three }]}>
             Appen søker gjennom hele tidsrommet på flere måter: vanlig søk, med flere bytter, med mer gange,
-            og på nytt uten de linjene som går igjen i forslagene. Bare det periodebilletten dekker er med:
-            Skyss og tog.
+            og på nytt uten de linjene som går igjen i forslagene. Til slutt slår den opp hvilke linjer som går
+            på hver etappe. Bare det periodebilletten dekker er med: Skyss og tog.
           </Text>
 
           <Pressable
@@ -257,7 +257,8 @@ export default function MappingScreen() {
             <Text style={[styles.primaryText, { color: theme.background }]}>Start kartlegging</Text>
           </Pressable>
           <Text style={[styles.label, styles.center, { color: theme.textMuted }]}>
-            Opptil {totalSearches({ times, viaStops: settings.viaStops })} søk hos Entur. Tar omtrent ett minutt.
+            Opptil {totalSearches({ times, viaStops: settings.viaStops })} søk hos Entur, pluss oppslag av
+            linjene på hver etappe. Tar under ett minutt.
           </Text>
         </ScrollView>
       )}
