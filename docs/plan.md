@@ -188,6 +188,42 @@ Ferdig når trafikkbildet for rv. 555 vises i appen og stemmer med faktiske pass
 - Visning på låseskjermen.
 - Automatisk gjenkjenning av buss og bytte med GPS.
 
+## Modeller og økter for videre arbeid
+
+Lagt til 13. november 2026. Appen selv bruker ingen AI-modell. Dette gjelder hvilken Claude-modell som brukes til å utvikle den i Claude Code.
+
+Modellene som er aktuelle, med listepris per million tokens (inn / ut) per 3. november 2026. Alle har kontekstvindu på én million tokens.
+
+| Modell | ID | Pris | Brukes til |
+|---|---|---|---|
+| Fable 5.2 | `claude-fable-5-2` | 8 / 40 USD | Det vanskeligste: logikk der en feil gir gale tall til brukeren |
+| Opus 5.5 | `claude-opus-5-5` | 4 / 20 USD | Vanlig utvikling av skjermer og funksjoner |
+| Sonnet 5.5 | `claude-sonnet-5-5` | 2 / 10 USD | Oppsett og arbeid som følger dokumentasjon |
+| Haiku 5.5 | `claude-haiku-5-5` | 0,10 / 0,50 USD | Små rettelser og oppslag |
+
+Forslag per oppgave:
+
+| Oppgave | Modell | Hvorfor |
+|---|---|---|
+| Fase 4: motoren (avganger per etappe, overgangstid, dør til dør) | Fable 5.2 | Kjernen i appen. Tidsregning over flere bytter med sanntid er lett å få subtilt feil |
+| Fase 4: forsiden etter godkjent skisse | Opus 5.5 | Skissen og reglene er ferdige; dette er gjennomføring |
+| Fase 5: om bord-logikken (rangere bytter, følge bussen, tapt bytte) | Fable 5.2 | Samme slags logikk som motoren, med flere tilstander |
+| Fase 5: om bord-skjermen og turrapporten | Opus 5.5 | Gjennomføring etter skisse |
+| Fase 6: trafikkbildet | Opus 5.5 | Oppsummering av passeringstider, uten egne spådommer |
+| Resten av fase 2: bygg til iPhone, PostHog, «merk», GPS | Sonnet 5.5 | Mest oppsett etter Expos og PostHogs dokumentasjon |
+| Fase 7: Android | Sonnet 5.5 | Bygg og testing |
+| Kodegjennomgang | Fable 5.2, egen økt | Skal finne feil den som skrev koden overså |
+| Rette funn fra gjennomgang | Opus 5.5 | Avgrensede endringer med tester |
+| Skisser sammen med brukeren | Opus 5.5 | Mange små runder; kvaliteten ligger i brukerens tilbakemeldinger |
+| Små tekst- og stilrettelser, oppdatere dokumenter | Haiku 5.5 eller Sonnet 5.5 | Krever lite |
+
+Slik deles arbeidet i økter:
+
+- Én fase, eller én tydelig del av en fase, per økt. Den første økten ble svært lang (over 800 000 tokens), og hver ny melding må da lese hele historikken.
+- En ny økt starter med å lese denne filen og reglene i `docs/design/` for skjermen det gjelder. Alt som er avgjort, skal stå der og ikke bare i en samtale.
+- Kodegjennomgang kjøres i egen økt uten historikken fra utviklingen, slik at den leser koden med friske øyne.
+- Prisene er listepriser for API-et. Med et abonnement gjelder bruksgrenser i stedet, men forholdet mellom modellene er det samme.
+
 ## Referanse: Entur
 
 Alle kall trenger headeren `ET-Client-Name`. Ingen API-nøkkel.
