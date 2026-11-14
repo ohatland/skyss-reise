@@ -1,6 +1,6 @@
 # Om bord-skjermen
 
-Godkjent 13. november 2026. Skissen ligger i [om-bord.html](om-bord.html).
+Godkjent 13. november 2026, og utvidet 14. november 2026 med spørsmålene, «Vis flere» og knappen «Jeg har gått av». Skissen ligger i [om-bord.html](om-bord.html).
 
 ## Hva som er viktigst
 
@@ -23,7 +23,7 @@ Den første skissen ble avvist som kaotisk fordi den hadde mange fokuspunkter. R
 - **Plattform** står sammen med holdeplassnavnet der den finnes.
 - **Kolonneoverskriftene** («Rute», «Holdeplass», «Overgangstid») står bare i det første kortet.
 - **«Fremme {sluttstopp}»** står bare i det første kortet når alle alternativene ender på samme holdeplass. Ender de på ulike holdeplasser, står den i alle kortene.
-- **Nederst:** en flaggknapp for «merk» og knappen «Jeg har byttet», begge nedtonet.
+- **Nederst:** en flaggknapp for «merk» og knappen «Jeg har gått av», begge nedtonet. Knappen het «Jeg har byttet» fram til 14. november 2026, se «Skjermen» under.
 
 ## Dør til dør (avgjort 13. november 2026)
 
@@ -58,7 +58,7 @@ Avgjort av brukeren etter at logikken for om bord var bygget og kjørt mot Entur
 - **Planen regnes på nytt ved hver oppdatering,** men appen holder på den, se «Hold på planen» under.
 - **Er den første avgangen videre for knapp,** kan planen være en senere avgang samme vei. Den knappe reisen står da som et eget kort under planen.
 - **Finnes ingen reise med minst ett minutt på alle bytter,** er planen den som er tidligst fremme uten tapt bytte. Finnes heller ikke det, er planen den som er tidligst fremme.
-- **Planen står øverst** og er merket som planen. De andre kortene står under, sortert på ankomst. Et kort som er tidligere fremme enn planen, men har et for knapt bytte, står dermed under planen.
+- **Planen står øverst** og skiller seg bare ut med den svake bakgrunnen. Ordet «Planen» står ikke på kortet; brukeren så det i skissen 14. november 2026 og svarte: «Fjern ordet Planen». De andre kortene står under, sortert på ankomst. Et kort som er tidligere fremme enn planen, men har et for knapt bytte, står dermed under planen.
 
 ### Hold på planen
 
@@ -122,9 +122,20 @@ Retningen er avgjort. Gjenkjenningen bygges når appen kjører på telefonen.
 - **Rapporten sammenligner planen slik den sto da brukeren gikk om bord,** med det som faktisk skjedde: hvilke kjøretøy i planen som ble brukt, og hvilke bytter som ble gjort.
 - **Siste anslag beholdes** ved siden av det første.
 
+### Skjermen
+
+Skissen ble lagt fram for brukeren 14. november 2026 med fire forslag. Svaret: «Fjern ordet Planen, ellers godkjent, gå videre».
+
+- **Spørsmålet står i et felt mellom overskriften og kortene,** med knappene Ja og Nei. Det dekker ikke kortene, og kortene kan leses uten å svare.
+- **«Jeg har gått av» erstatter «Jeg har byttet».** Appen spør selv om byttene i planen. Knappen er for når brukeren går av et annet sted enn planen sier. Han får da reisene videre fra holdeplassen kjøretøyet står ved, og sier fra når han er om bord på neste.
+- **Den samme knappen er måten å avvike fra planen på.** Det er ingen egen funksjon for å følge et annet kort enn planen. Spørsmålene gjelder planen.
+- **Et spørsmål som ikke besvares, blir stående** til neste spørsmål erstatter det eller reisen er over. Det faller ikke bort av seg selv.
+- **Mens brukeren venter på en holdeplass,** er overskriften «Du venter på {holdeplass}», og kortene er som ellers.
+- **«Vis flere ({antall})»** står under kortene når det finnes kort som er fremme mer enn 30 minutter etter planen.
+- **Om bord startes fra forsiden** slik det ble bekreftet 13. november 2026, se [for-avreise.md](for-avreise.md): knappen nederst («Jeg er på 400 fra 07:09») gjelder det øverste kortet, og et trykk på et annet kort starter om bord for den bussen.
+
 ### Ikke avgjort
 
-- **Hvordan spørsmålene vises** på skjermen, og om knappen «Jeg har byttet» i skissen blir stående ved siden av dem.
-- **Følger brukeren et annet kort enn planen,** spør appen ikke på holdeplassen der det kortet har byttet. Spørsmålene gjelder planen.
-- **Et spørsmål som ikke besvares,** blir stående. Det er ikke avgjort om det skal falle bort etter en stund.
+- **«Jeg har gått av» på en holdeplass som ikke er med i de lagrede alternativene.** Appen har da ingen reiser videre derfra. Avgjøres når skjermen bygges.
+- **Hvor turrapporten lagres.**
 

@@ -10,6 +10,7 @@
   --text:#1f1f1e; --text-2:#5f5e5a; --text-3:#888780;
   --line:#d3d1c7; --line-soft:#e6e4dc;
   --good:#15803d; --tight:#a16207; --missed:#dc2626; --m-weight:600;
+  --ask-bg:#e6f1fb; --ask-line:#85b7eb; --ask-text:#0c447c;
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -17,6 +18,7 @@
     --text:#f1efe8; --text-2:#b4b2a9; --text-3:#888780;
     --line:#4a4a46; --line-soft:#3a3a37;
     --good:#97c459; --tight:#ef9f27; --missed:#f09595; --m-weight:500;
+    --ask-bg:#0c447c; --ask-line:#185fa5; --ask-text:#e6f1fb;
   }
 }
 *{box-sizing:border-box}
@@ -42,11 +44,16 @@ h1{font-size:18px;font-weight:500;color:var(--text);text-align:center;margin:0 0
 .bar button{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
 .bar button:last-child{flex:1}
 .bar svg{display:block}
+.more{text-align:center;margin-top:10px!important}
+.ask{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding:10px 12px;border:1px solid var(--ask-line);border-radius:12px;background:var(--ask-bg)}
+.ask p{font-size:14px;font-weight:500;color:var(--ask-text)}
+.ask div{display:flex;gap:6px}
+.ask button{font:inherit;color:var(--ask-text);background:transparent;border:1px solid var(--ask-line);border-radius:8px;padding:6px 12px}
 </style>
 </head>
 <body>
 <h1>Om bord – godkjent skisse</h1>
-<p class="note">Godkjent 13. november 2026, og tegnet om samme dag slik at ankomsten regnes helt frem til jobben. Tallene er eksempler.</p>
+<p class="note">Godkjent 13. november 2026, og tegnet om samme dag slik at ankomsten regnes helt frem til jobben. Utvidet 14. november 2026 med spørsmålet, «Vis flere» og «Jeg har gått av». Planen står øverst med svak bakgrunn. Tallene er eksempler.</p>
 
 <div class="wrap">
   <div>
@@ -88,7 +95,76 @@ h1{font-size:18px;font-weight:500;color:var(--text);text-align:center;margin:0 0
       </div>
       <div class="bar">
         <button aria-label="Merk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 5h12l-2.5 4L17 13H5"/></svg></button>
-        <button>Jeg har byttet</button>
+        <button>Jeg har gått av</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Fra jobb, underveis</p>
+    <div class="ph">
+      <p class="hd">Du er på 50E mot Bergen busstasjon</p>
+      <div class="card best">
+        <p class="lb">Fremme Krokåsskiftet</p>
+        <p class="arr n">16:35</p>
+        <div class="t">
+          <span class="lb">Rute</span><span class="lb">Holdeplass</span><span class="lb">Overgangstid</span>
+          <span class="ru">410</span><span>Møhlenpris, plattform S</span><span class="m n a">2:08</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="arr n">16:41</p>
+        <div class="t">
+          <span class="ru">400</span><span>Bergen busstasjon, plattform F</span><span class="m n g">4:10</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="arr n">16:53</p>
+        <div class="t">
+          <span class="ru">410</span><span>Møhlenpris, plattform S</span><span class="m n g">20:08</span>
+        </div>
+      </div>
+      <p class="more">Vis flere (2)</p>
+      <div class="bar">
+        <button aria-label="Merk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 5h12l-2.5 4L17 13H5"/></svg></button>
+        <button>Jeg har gått av</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="cap">Fra jobb, bussen er fremme ved byttet</p>
+    <div class="ph">
+      <p class="hd">Du er på 50E mot Bergen busstasjon</p>
+      <div class="ask">
+        <p>Gikk du av på Møhlenpris?</p>
+        <div><button>Ja</button><button>Nei</button></div>
+      </div>
+      <div class="card best">
+        <p class="lb">Fremme Krokåsskiftet</p>
+        <p class="arr n">16:35</p>
+        <div class="t">
+          <span class="lb">Rute</span><span class="lb">Holdeplass</span><span class="lb">Overgangstid</span>
+          <span class="ru">410</span><span>Møhlenpris, plattform S</span><span class="m n a">1:12</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="arr n">16:29</p>
+        <div class="t">
+          <span class="ru">403</span><span>Møhlenpris, plattform S</span><span class="m n r">−0:40</span>
+        </div>
+        <p class="lb" style="margin-top:6px">Rekker du den ikke: fremme 16:35</p>
+      </div>
+      <div class="card">
+        <p class="arr n">16:41</p>
+        <div class="t">
+          <span class="ru">400</span><span>Bergen busstasjon, plattform F</span><span class="m n g">4:10</span>
+        </div>
+      </div>
+      <p class="more">Vis flere (2)</p>
+      <div class="bar">
+        <button aria-label="Merk"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 5h12l-2.5 4L17 13H5"/></svg></button>
+        <button>Jeg har gått av</button>
       </div>
     </div>
   </div>
