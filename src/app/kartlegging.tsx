@@ -42,7 +42,12 @@ type Phase =
 export default function MappingScreen() {
   const theme = useTheme();
   const [tripTypeId, setTripTypeId] = useState<TripTypeId>('fromWork');
-  const [settings, setSettings] = useState<MappingSettings>(defaultSettings('fromWork'));
+  // The settings read or changed, with the trip type they belong to. Until they are read, the defaults apply.
+  const [known, setKnown] = useState<{ tripTypeId: TripTypeId; settings: MappingSettings } | null>(null);
+  const settings = useMemo(
+    () => (known?.tripTypeId === tripTypeId ? known.settings : defaultSettings(tripTypeId)),
+    [known, tripTypeId],
+  );
   const [phase, setPhase] = useState<Phase>({ name: 'setup' });
   const [saved, setSaved] = useState<SavedRoutes>(NO_ROUTES);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -65,13 +70,18 @@ export default function MappingScreen() {
   );
 
   useEffect(() => {
-    setSettings(defaultSettings(tripTypeId));
-    loadMappingSettings(tripTypeId).then(setSettings);
+    let current = true;
+    loadMappingSettings(tripTypeId).then((loaded) => {
+      if (current) setKnown({ tripTypeId, settings: loaded });
+    });
+    return () => {
+      current = false;
+    };
   }, [tripTypeId]);
 
   const changeSettings = useCallback(
     (next: MappingSettings) => {
-      setSettings(next);
+      setKnown({ tripTypeId, settings: next });
       saveMappingSettings(tripTypeId, next).catch((error) => log.error(error, { where: 'saveMappingSettings' }));
     },
     [tripTypeId],
@@ -335,9 +345,14 @@ interface ClockFieldProps {
 function ClockField({ label, value, onChange }: ClockFieldProps) {
   const theme = useTheme();
   const [draft, setDraft] = useState(value);
+  const [shown, setShown] = useState(value);
   const invalid = parseClock(draft) === null;
 
-  useEffect(() => setDraft(value), [value]);
+  // The value changed from outside, as when the trip type is switched: the field follows it.
+  if (shown !== value) {
+    setShown(value);
+    setDraft(value);
+  }
 
   return (
     <TextInput

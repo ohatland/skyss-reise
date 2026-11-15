@@ -16,10 +16,6 @@ import { planOnBoard } from '@/onboard/follow';
 import { afterLook } from '@/onboard/session';
 import { createOnBoardStore, type Look } from '@/onboard/store';
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
-
 beforeEach(() => setLogSinks([]));
 
 /** What Entur says: the calls of each journey, and the calls at the stops onward. */

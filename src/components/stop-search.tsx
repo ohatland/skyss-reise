@@ -18,12 +18,17 @@ export function StopSearch({ placeholder, onSelect, autoFocus }: Props) {
   const [hits, setHits] = useState<StopHit[]>([]);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (text.trim().length < 2) {
+  const change = (next: string) => {
+    setText(next);
+    // Too short to search for: nothing is found, and nothing has failed.
+    if (next.trim().length < 2) {
       setHits([]);
       setFailed(false);
-      return;
     }
+  };
+
+  useEffect(() => {
+    if (text.trim().length < 2) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       searchStops(text, { signal: controller.signal })
@@ -45,7 +50,7 @@ export function StopSearch({ placeholder, onSelect, autoFocus }: Props) {
     <View>
       <TextInput
         value={text}
-        onChangeText={setText}
+        onChangeText={change}
         placeholder={placeholder}
         placeholderTextColor={theme.textMuted}
         autoFocus={autoFocus}

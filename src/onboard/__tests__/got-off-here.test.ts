@@ -16,10 +16,6 @@ import {
 import { silentTwin } from '@/onboard/__fixtures__/vehicle';
 import { answer, gotOffHere, stopVehicleIsAt, tripIsOver } from '@/onboard/session';
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
-
 beforeEach(() => setLogSinks([]));
 
 const moment = (clock: string) => new Date(at(clock));

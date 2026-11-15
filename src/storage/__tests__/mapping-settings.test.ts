@@ -3,10 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setLogSinks } from '@/logging/logger';
 import { defaultSettings, loadMappingSettings, saveMappingSettings } from '@/storage/mapping-settings';
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
-
 const storage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 const evening = { start: '15:00', end: '16:00', viaStops: [] };
 const morning = { start: '07:00', end: '08:00', viaStops: [] };

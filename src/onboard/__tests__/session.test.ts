@@ -9,10 +9,6 @@ import { planOnBoard, type OnBoardPlan } from '@/onboard/follow';
 import { afterLook, answer, nextStepOf, refresh, startSession, type Answer, type OnBoardSession, type Question } from '@/onboard/session';
 import { NO_ROUTES, type SavedRoutes } from '@/storage/alternatives';
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
-
 const work: StopRef = { id: 'place:work', name: 'Jobb' };
 const krokasskiftet: StopRef = { id: 'NSR:StopPlace:32541', name: 'Krokåsskiftet' };
 const birkelandsskiftet = stop('Birkelandsskiftet');

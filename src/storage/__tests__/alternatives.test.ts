@@ -15,10 +15,6 @@ import {
   type SavedRoutes,
 } from '@/storage/alternatives';
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
-
 const storage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 
 const stop = (name: string): StopRef => ({ id: `stop:${name}`, name });

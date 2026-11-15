@@ -1,25 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
 
-/** Set once the app has hydrated, so that components mounted later do not render light first and blink. */
-let appHydrated = false;
+const never = () => () => {};
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * The colour scheme on web. The server renders light, so the client does too
+ * while it hydrates, and takes the real scheme after. A component mounted
+ * later gets the real scheme at once and does not render light first and blink.
  */
 export function useColorScheme() {
-  const [hasHydrated, setHasHydrated] = useState(appHydrated);
-
-  useEffect(() => {
-    appHydrated = true;
-    setHasHydrated(true);
-  }, []);
-
+  const hydrated = useSyncExternalStore(
+    never,
+    () => true,
+    () => false,
+  );
   const colorScheme = useRNColorScheme();
 
-  if (hasHydrated) {
-    return colorScheme;
-  }
-
-  return 'light';
+  return hydrated ? colorScheme : 'light';
 }
