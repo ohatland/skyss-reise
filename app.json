@@ -1,20 +1,16 @@
 {
   "expo": {
-    "name": "Skyss-reise",
-    "slug": "skyss-reise",
+    "name": "Bussbytte",
+    "slug": "bussbytte",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "skyssreise",
+    "scheme": "bussbytte",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#2C2C2A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
@@ -28,9 +24,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#2C2C2A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120
         }
       ],
       "expo-localization"
@@ -38,6 +34,24 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2934ba98-7059-4c62-870d-ee3fa8e12764"
+      }
+    },
+    "owner": "nedoverbakke",
+    "ios": {
+      "bundleIdentifier": "dev.hatland.bussbytte",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2934ba98-7059-4c62-870d-ee3fa8e12764"
     }
   }
 }

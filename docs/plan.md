@@ -1,10 +1,18 @@
-# Skyss-reise: konsept og faseplan
+# Bussbytte: konsept og faseplan
 
 Konseptet ble godkjent 13. november 2026. Fase 1 (design) ble ferdig samme dag. Fase 2 er påbegynt; se status under fasen.
 
 ## Formål
 
 En app for iPhone og Android som gjør pendlingen mellom Krokåsskiftet og Birkelandsskiftet / Grana enklere å styre, særlig valget av bytte mens man sitter på bussen. Appen er til eget bruk.
+
+### Navn og logo
+
+Appen heter **Bussbytte** (valgt av brukeren 17. november 2026). Arbeidsnavnet var Skyss-reise, og mappen og repoet heter fortsatt `skyss-reise`.
+
+- Brukerens krav: appen er et alternativ til Skyss sin reiseplanlegger, ikke en konkurrent, og skal ikke kunne tas for å etterligne den. Navnet bruker derfor ikke «Skyss». Det skal samtidig være tydelig at appen handler om bussreiser.
+- Logoen er to busser forskjøvet for hverandre, en lys og en grønn, på mørk flate (`#2C2C2A`). Det grønne er fargen for god overgangstid. Kilden er `assets/logo/bussbytte-*.svg`, og ikonfilene i `assets/images/` er laget fra den.
+- App-identifikatoren er `dev.hatland.bussbytte`.
 
 ## Konsept
 
@@ -137,6 +145,15 @@ Status 17. november 2026 (grenen `fase-2-posthog`, ikke committet):
 - Gjort: PostHog-sink (`src/logging/posthog.ts`) som legges ved loggeren når `EXPO_PUBLIC_POSTHOG_KEY` er satt, med EU-verten `https://eu.i.posthog.com` som standard. Uten nøkkel logger appen bare til konsollen, som før. Uncaught feil og avviste løfter fanges av SDK-en; feil appen selv fanger går gjennom `log.error` til `captureException`. «Merk»-knappen (`src/components/mark-button.tsx`, `src/logging/mark.ts`) står nederst på forsiden og på om bord-skjermen: ett trykk sender `mark_created` med skjermen, reisetype, kortenes kjøretøy og tider og om bord-øktens tilstand; kategori og notat fra arket sendes som `mark_noted` med samme `markId`.
 - Ikke gjort: skjermopptak (PostHogs dokumentasjon sier ikke at det fungerer med Expo SDK 58, og det krever et eget bygg), krasjfangst i native kode (`nativeCrashes`, krever `@posthog/react-native-plugin` og et eget bygg), posisjon i merket (GPS-loggingen kommer senere), logg-skjermen bak tannhjulet der notatet kan skrives senere, og koblingen fra Claude Code.
 - Prøvd i nettleseren, ikke på telefon. Alt som bare gjelder iPhone-bygget, står i rapporten fra økten.
+
+Status 17. november 2026 (grenen `fase-2-iphone-bygg`, ikke committet): eget bygg satt på vent, Expo Go brukes inntil videre.
+
+- Oppsatt: Expo-prosjektet `@nedoverbakke/bussbytte` (id i `app.json`), `expo-updates` med `runtimeVersion` `{ "policy": "sdkVersion" }` (gir `exposdk:58.0.0`, slik at Expo Go kan laste oppdateringene), og `eas.json` med profilen `preview` (intern distribusjon, kanal og miljø `preview`) for et eget bygg senere. `ios.bundleIdentifier` er `dev.hatland.bussbytte`. `EXPO_PUBLIC_POSTHOG_KEY` ligger i Expo-miljøet `preview` (synlighet `sensitive`) og er verifisert lagt inn i den publiserte pakken.
+- Stoppet: bygget til iPhone ble avvist av Apple under arbeidsgiverens team (Admmit As) da app-id'en `dev.hatland.bussbytte` skulle registreres: «Apple 403 detected - Access forbidden… Please check with one of your Team Admins». Innlogging, tofaktor og registrering av telefonen (`eas device:create`) gikk fint. Rollen på kontoen mangler trolig tilgang til «Certificates, Identifiers & Profiles». Ingen app-id, sertifikat eller bygg er opprettet. Telefonen står som enhet under arbeidsgiverens team (fjernes med `eas device:delete`).
+- Slik publiserer du en oppdatering til Expo Go: `npx eas-cli@latest update --branch preview --platform ios --environment preview --message "…"`. `--environment` er påkrevd fra SDK 55, og lokale `.env`-filer leses ikke, så nøkkelen må ligge i Expo-miljøet (`npx eas-cli@latest env:set --name EXPO_PUBLIC_POSTHOG_KEY --environment preview --visibility sensitive`). Første oppdatering ble publisert samme dag (oppdateringsside: `https://expo.dev/accounts/nedoverbakke/projects/bussbytte/updates/af194f5d-9286-4b62-86be-abf92fb9a9d8`).
+- Slik lages et eget bygg senere (krever at Apple-kontoen kan opprette app-id, sertifikat og profil): bytt `runtimeVersion` til `{ "policy": "fingerprint" }` (eller `appVersion`), kjør `npx eas-cli@latest device:create`, og så `npx eas-cli@latest build --platform ios --profile preview`. Oppdateringer publiseres da som over.
+- Ved flytting til egen Apple-konto: ny innlogging, valg av det personlige teamet og ny registrering av telefonen (`device:create`); app-id, sertifikat og provisjoneringsprofil opprettes på nytt under det teamet, og appen må bygges og installeres på nytt (samme `dev.hatland.bussbytte` kan bare brukes hvis den ikke allerede er registrert under arbeidsgiveren). Sertifikatet fra arbeidsgiverens team kan fjernes med `eas credentials`.
+- Bekreftet 17. november 2026: brukeren åpnet appen i Expo Go på iPhonen, og hendelser fra telefonen kom i PostHog (`Application Installed`, `Application Opened`, `entur_call` og `mapping_run`, med `$app_name` «Expo Go», `$os` iOS, `$device_name` «iPhone 16» og `platform` ios; kontrollert med SQL mot prosjektet). Ikke bekreftet: at en oppdatering publisert etterpå nådde telefonen uten utviklingsmaskinen, og at appen kjørte med utviklingsmaskinen av. I Expo Go har appen Expo Gos navn og ikon. Skjermopptak, krasjfangst i native kode og GPS med låst skjerm krever uansett eget bygg.
 
 ### Fase 3: Reisetyper og alternativer
 
