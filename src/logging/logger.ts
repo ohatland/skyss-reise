@@ -1,9 +1,12 @@
 /**
  * App-wide event and error log. Everything the app records goes through here,
- * so the PostHog sink can be attached in one place once the account exists.
+ * and the sinks (the console, PostHog) are attached in one place: see `setLogSinks`.
  */
 
-export type LogProperties = Record<string, string | number | boolean | null | undefined>;
+/** A value an event can carry: plain JSON, so that a snapshot of a screen can nest. */
+export type LogValue = string | number | boolean | null | undefined | LogValue[] | { [key: string]: LogValue };
+
+export type LogProperties = Record<string, LogValue>;
 
 export interface LogSink {
   event(name: string, properties: LogProperties): void;
@@ -23,6 +26,11 @@ let sinks: LogSink[] = [consoleSink];
 
 export function setLogSinks(next: LogSink[]): void {
   sinks = next;
+}
+
+/** Adds a sink next to those already there, such as the console. */
+export function addLogSink(sink: LogSink): void {
+  sinks = [...sinks, sink];
 }
 
 export const log = {

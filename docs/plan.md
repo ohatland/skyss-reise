@@ -128,9 +128,15 @@ Status 13. november 2026:
 
 - Gjort: git, Expo-prosjekt (SDK 58), Entur-klient, kjernelogikk for overgangstid og avgangsmerking med tester, og en avgangstavle for Krokåsskiftet som er kontrollert i nettleser mot ekte Entur-data.
 - Gjenstår: eget bygg på iPhonen, PostHog, «merk»-knapp, GPS-logging og kobling fra Claude Code til PostHog. Alt dette venter på kontoer hos Apple, Expo og PostHog, som brukeren oppretter.
-- Loggen går foreløpig bare til konsollen, gjennom `src/logging/logger.ts`. PostHog kobles på der.
+- Loggen går til konsollen og, med nøkkel i `.env.local`, til PostHog (EU), gjennom `src/logging/logger.ts`. Se «Status 17. november 2026» under.
 - `ET-Client-Name` mot Entur er en nøytral standardverdi. Brukeren bør sette sin egen i `EXPO_PUBLIC_ENTUR_CLIENT_NAME`.
 - Lint er ikke satt opp.
+
+Status 17. november 2026 (grenen `fase-2-posthog`, ikke committet):
+
+- Gjort: PostHog-sink (`src/logging/posthog.ts`) som legges ved loggeren når `EXPO_PUBLIC_POSTHOG_KEY` er satt, med EU-verten `https://eu.i.posthog.com` som standard. Uten nøkkel logger appen bare til konsollen, som før. Uncaught feil og avviste løfter fanges av SDK-en; feil appen selv fanger går gjennom `log.error` til `captureException`. «Merk»-knappen (`src/components/mark-button.tsx`, `src/logging/mark.ts`) står nederst på forsiden og på om bord-skjermen: ett trykk sender `mark_created` med skjermen, reisetype, kortenes kjøretøy og tider og om bord-øktens tilstand; kategori og notat fra arket sendes som `mark_noted` med samme `markId`.
+- Ikke gjort: skjermopptak (PostHogs dokumentasjon sier ikke at det fungerer med Expo SDK 58, og det krever et eget bygg), krasjfangst i native kode (`nativeCrashes`, krever `@posthog/react-native-plugin` og et eget bygg), posisjon i merket (GPS-loggingen kommer senere), logg-skjermen bak tannhjulet der notatet kan skrives senere, og koblingen fra Claude Code.
+- Prøvd i nettleseren, ikke på telefon. Alt som bare gjelder iPhone-bygget, står i rapporten fra økten.
 
 ### Fase 3: Reisetyper og alternativer
 
@@ -192,7 +198,7 @@ Status 14. november 2026:
 - Turlogg (`src/onboard/trip-log.ts`): `startLog`, `observe`, `finishLog` og `tripReport` gir data til turrapporten: rutetid mot faktisk tid per kjøretøy, vist overgangstid (første og siste gang) mot faktisk per bytte, bytter som røk, og ankomst mot første anslag.
 - Entur lister noen avganger som to turer, der bare den ene rapporterer etter start. Den andre står på rutetiden og får «faktisk ankomst» lik rutetiden, men aldri faktisk avgang. `followVehicle` bytter til turen som rapporterer, og `plan.following` sier hvilken det er.
 - Gjort samme kveld: om bord-skjermen (`src/app/om-bord.tsx`) og veien inn fra forsiden. Knappen nederst på forsiden («Jeg er på 400 fra 07:09») gjelder det øverste kortet, og et trykk på et kort starter om bord for kortets første kjøretøy. Økten ligger utenfor skjermen (`src/onboard/store.ts`, `src/hooks/use-on-board.ts`) og oppdateres mot Entur hvert 20. sekund mens skjermen er åpen. Skjermen viser overskriften, spørsmålet med Ja og Nei, kortene med planen øverst (`TripCard` med `onBoard`), «Vis flere» og «Jeg har gått av». Turloggen føres i minnet. Når brukeren har gått av der reisen ender, går appen tilbake til forsiden. Ny hendelse i logikken: `gotOffHere` og `stopVehicleIsAt` i `session.ts` for «Jeg har gått av», og `tripIsOver`. Valgene som ble gjort under byggingen, står i `docs/design/om-bord.md` under «Skjermen slik den er bygget».
-- Ikke med: økten og turloggen lagres ikke, så de er borte når appen startes på nytt. Forsiden har knappen «Tilbake til reisen» mens en reise pågår (lagt inn 15. november 2026). Flaggknappen «merk» er utelatt til en senere fase.
+- Ikke med: økten og turloggen lagres ikke, så de er borte når appen startes på nytt. Forsiden har knappen «Tilbake til reisen» mens en reise pågår (lagt inn 15. november 2026). Flaggknappen «merk» kom med fase 2 (17. november 2026).
 - «Jeg har gått av» på en holdeplass uten lagrede reiser videre gir «Ingen lagrede reiser videre fra {holdeplass}.» og knappen «Avslutt reisen» (avgjort av brukeren samme kveld). Reservesøk derfra kommer senere.
 - Gjenstår: lagring av økten og turloggen, reservesøk hos Entur, turrapportskjermen, gjenkjenning med GPS og hastighet, og prøve på telefon og i rushtiden.
 - Avgjort av brukeren samme dag, og lagt inn i logikken (reglene står i `docs/design/om-bord.md` under «Avgjort 14. november 2026»):

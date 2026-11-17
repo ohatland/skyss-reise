@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MarkButton } from '@/components/mark-button';
 import { TripCard } from '@/components/trip-card';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { noCardsText, onBoardCards, onBoardHeading, questionText, strandedAtStop } from '@/core/on-board';
 import { formatClock } from '@/core/time';
 import { useOnBoard } from '@/hooks/use-on-board';
 import { useTheme } from '@/hooks/use-theme';
+import { onBoardSnapshot } from '@/logging/mark';
 
 /** Back to the front page, under this screen when on board was started from it. */
 function toFrontPage() {
@@ -126,8 +128,9 @@ export default function OnBoardScreen() {
         ))}
       </ScrollView>
 
-      {!waiting && (
-        <View style={styles.bar}>
+      <View style={styles.bar}>
+        <MarkButton snapshot={() => onBoardSnapshot(state, showHidden)} />
+        {!waiting && (
           <Pressable
             onPress={gotOff}
             disabled={!canGetOff}
@@ -136,8 +139,8 @@ export default function OnBoardScreen() {
             style={[styles.button, styles.wide, styles.grow, { borderColor: theme.border }, !canGetOff && styles.dimmed]}>
             <Text style={[styles.body, { color: theme.textSecondary }]}>Jeg har gått av</Text>
           </Pressable>
-        </View>
-      )}
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -173,6 +176,6 @@ const styles = StyleSheet.create({
   wide: { alignItems: 'center' },
   grow: { flex: 1 },
   more: { marginTop: Spacing.three },
-  bar: { flexDirection: 'row', paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
+  bar: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
   dimmed: { opacity: 0.5 },
 });

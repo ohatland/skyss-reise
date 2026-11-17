@@ -41,3 +41,8 @@ example
 # generated native folders
 /ios
 /android
+
+# Environment files with keys. .env.example, with names and no values, is the one to commit.
+.env
+.env.*
+!.env.example

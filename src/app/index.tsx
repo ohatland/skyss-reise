@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TripCard } from '@/components/trip-card';
+import { MarkButton } from '@/components/mark-button';
 import { TripTypeSwitch } from '@/components/trip-type-switch';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { boardButtonText, defaultTripType, labelsOnEveryCard } from '@/core/front-page';
@@ -14,6 +15,7 @@ import type { PlannedTrip } from '@/engine/trips';
 import { useTripGoing } from '@/hooks/use-on-board';
 import { useTheme } from '@/hooks/use-theme';
 import { useTripPlan } from '@/hooks/use-trip-plan';
+import { frontPageSnapshot } from '@/logging/mark';
 import { TRIP_TYPES } from '@/model/places';
 import type { TripTypeId } from '@/model/types';
 import { onBoardStore } from '@/onboard/store';
@@ -147,8 +149,9 @@ export default function BeforeDepartureScreen() {
           ))}
       </ScrollView>
 
-      {(tripGoing || (top && topButton)) && (
-        <View style={styles.bar}>
+      <View style={styles.bar}>
+        <MarkButton snapshot={() => frontPageSnapshot({ tripType, plan, noRoutes, failed, showHidden })} />
+        <View style={styles.barButtons}>
           {tripGoing && (
             <Pressable
               onPress={() => router.push('/om-bord')}
@@ -166,7 +169,7 @@ export default function BeforeDepartureScreen() {
             </Pressable>
           )}
         </View>
-      )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -194,5 +197,13 @@ const styles = StyleSheet.create({
   },
   wide: { alignItems: 'center' },
   more: { marginTop: Spacing.three },
-  bar: { gap: Spacing.two, paddingHorizontal: Spacing.four, paddingTop: Spacing.two, paddingBottom: Spacing.three },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+  },
+  barButtons: { flex: 1, gap: Spacing.two },
 });
