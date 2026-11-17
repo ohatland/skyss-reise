@@ -10,7 +10,7 @@ import { nextWeekday } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
 import { log } from '@/logging/logger';
 import { appendLeg } from '@/mapping/build';
-import { findDirectLeg, findWalkSeconds } from '@/mapping/direct';
+import { findDirectLegs, findWalkSeconds } from '@/mapping/direct';
 import { anchorOf, chainKey, shortStopName } from '@/mapping/pattern';
 import { searchTrips } from '@/mapping/query';
 import { TRIP_TYPES } from '@/model/places';
@@ -21,6 +21,7 @@ import {
   type Leg,
   type Place,
   type StopRef,
+  type TransitLeg,
   type TripTypeId,
 } from '@/model/types';
 import { formatWalkTime } from '@/model/walks';
@@ -41,6 +42,8 @@ export default function BuildScreen() {
   const [to, setTo] = useState<StopRef | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** Direct rides Entur found that start at different stops: the traveller picks which one to add. */
+  const [choices, setChoices] = useState<TransitLeg[]>([]);
 
   const last = legs[legs.length - 1];
   const start = from ?? last?.to ?? null;
@@ -50,14 +53,19 @@ export default function BuildScreen() {
     if (!start || !to) return;
     setBusy(true);
     setMessage(null);
+    setChoices([]);
     try {
       if (kind === 'transit') {
-        const leg = await findDirectLeg(start, to, deps);
-        if (!leg) {
+        const found = await findDirectLegs(start, to, deps);
+        if (found.length === 0) {
           setMessage(`Entur fant ingen direkte rute fra ${shortStopName(start.name)} til ${shortStopName(to.name)}.`);
           return;
         }
-        setLegs((current) => appendLeg(current, leg));
+        if (found.length > 1) {
+          setChoices(found);
+          return;
+        }
+        setLegs((current) => appendLeg(current, found[0]));
       } else {
         const seconds = await findWalkSeconds(asPlace(start), asPlace(to), deps);
         if (seconds === null) {
@@ -75,6 +83,13 @@ export default function BuildScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const choose = (leg: TransitLeg) => {
+    setLegs((current) => appendLeg(current, leg));
+    setChoices([]);
+    setFrom(null);
+    setTo(null);
   };
 
   const rides = legs.filter((leg) => leg.kind === 'transit');
@@ -144,6 +159,7 @@ export default function BuildScreen() {
                 setLegs((current) => current.slice(0, -1));
                 setFrom(null);
                 setTo(null);
+                setChoices([]);
                 setMessage(null);
               }}
               disabled={busy}
@@ -163,7 +179,13 @@ export default function BuildScreen() {
         <View style={[styles.field, { borderBottomColor: theme.borderSoft }]}>
           <Text style={[styles.body, { color: theme.textSecondary }]}>Fra</Text>
           {start ? (
-            <Pressable onPress={() => setFrom(null)} disabled={!from || busy} accessibilityRole="button">
+            <Pressable
+              onPress={() => {
+                setFrom(null);
+                setChoices([]);
+              }}
+              disabled={!from || busy}
+              accessibilityRole="button">
               <Text style={[styles.body, { color: theme.text }]}>
                 {shortStopName(start.name)}
                 {from ? ' ×' : ''}
@@ -177,7 +199,10 @@ export default function BuildScreen() {
           <Text style={[styles.body, { color: theme.textSecondary }]}>Til</Text>
           {to ? (
             <Pressable
-              onPress={() => setTo(null)}
+              onPress={() => {
+                setTo(null);
+                setChoices([]);
+              }}
               disabled={busy}
               accessibilityRole="button"
               accessibilityLabel="Velg en annen holdeplass">
@@ -203,6 +228,26 @@ export default function BuildScreen() {
               style={[styles.button, styles.half, { borderColor: theme.border }]}>
               <Text style={[styles.body, { color: legs.length ? theme.text : theme.textMuted }]}>Gå hit</Text>
             </Pressable>
+          </View>
+        )}
+        {choices.length > 0 && (
+          <View style={styles.choices}>
+            <Text style={[styles.label, { color: theme.textMuted }]}>
+              Rutene går fra ulike holdeplasser. Velg hvilken etappe som skal legges til:
+            </Text>
+            {choices.map((leg) => (
+              <Pressable
+                key={`${leg.from.id}>${leg.to.id}`}
+                onPress={() => choose(leg)}
+                accessibilityRole="button"
+                accessibilityLabel={`Legg til ${leg.lines.join(', ')} fra ${shortStopName(leg.from.name)} til ${shortStopName(leg.to.name)}`}
+                style={[styles.button, { borderColor: theme.border }]}>
+                <Text style={[styles.body, { color: theme.text, fontWeight: '500' }]}>{leg.lines.join(', ')}</Text>
+                <Text style={[styles.label, { color: theme.textSecondary }]}>
+                  {shortStopName(leg.from.name)} → {shortStopName(leg.to.name)}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         )}
         {message && <Text style={[styles.label, { color: theme.marginMissed, marginTop: Spacing.two }]}>{message}</Text>}
@@ -267,6 +312,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginBottom: Spacing.two,
   },
+  choices: { gap: Spacing.two, marginTop: Spacing.three },
   actions: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two },
   half: { flex: 1 },
   button: { borderWidth: 1, borderRadius: Radius.control, paddingVertical: Spacing.two, alignItems: 'center' },

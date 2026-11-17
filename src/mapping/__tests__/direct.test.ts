@@ -1,6 +1,6 @@
 import { toStopHits } from '@/entur/stops';
 import { setLogSinks } from '@/logging/logger';
-import { findDirectLeg, findWalkSeconds, linesBetween } from '@/mapping/direct';
+import { findDirectLegs, findWalkSeconds, linesBetween } from '@/mapping/direct';
 import type { TripLegResponse, TripPatternResponse, TripSearchParams } from '@/mapping/query';
 import { HOME, WORK } from '@/model/places';
 import type { StopRef } from '@/model/types';
@@ -34,30 +34,69 @@ const deps = (search: (params: TripSearchParams) => Promise<TripPatternResponse[
   date: '2026-11-16',
 });
 
-describe('findDirectLeg', () => {
-  it('collects the lines that run directly, across the day', async () => {
+/** The one direct ride, for the tests where all of Entur's answers agree on the stops. */
+const onlyRide = async (...args: Parameters<typeof findDirectLegs>) => {
+  const found = await findDirectLegs(...args);
+  expect(found.length).toBeLessThanOrEqual(1);
+  return found[0] ?? null;
+};
+
+describe('findDirectLegs', () => {
+  it('collects the lines that run directly', async () => {
+    const found = await onlyRide(
+      searchedBirkelandsskiftet,
+      mohlenpris,
+      deps(async (params) =>
+        params.dateTime.includes('T07:00')
+          ? [trip([ride('50E', busStop, mohlenpris)])]
+          : [trip([ride('50E', busStop, mohlenpris)]), trip([ride('51', busStop, mohlenpris)])],
+      ),
+    );
+    expect(found?.lines).toEqual(['50E', '51']);
+  });
+
+  it('searches through the whole service day, in windows that follow one another', async () => {
     const calls: TripSearchParams[] = [];
-    const found = await findDirectLeg(
+    await findDirectLegs(
       searchedBirkelandsskiftet,
       mohlenpris,
       deps(async (params) => {
         calls.push(params);
-        return params.dateTime.includes('T07:00')
-          ? [trip([ride('50E', busStop, mohlenpris)])]
-          : [trip([ride('50E', busStop, mohlenpris)]), trip([ride('51', busStop, mohlenpris)])];
+        return [];
       }),
     );
 
-    expect(calls.map((c) => c.dateTime)).toEqual([
-      '2026-11-16T07:00:00+01:00',
-      '2026-11-16T12:00:00+01:00',
-      '2026-11-16T16:00:00+01:00',
-    ]);
-    expect(found?.lines).toEqual(['50E', '51']);
+    expect(calls[0].dateTime).toBe('2026-11-16T05:00:00+01:00');
+    expect(calls[calls.length - 1].dateTime).toBe('2026-11-16T23:00:00+01:00');
+    const window = calls[0].searchWindowMinutes ?? 0;
+    expect(window).toBeGreaterThan(0);
+    // Each search starts where the one before it stops looking: no departure falls between two.
+    const minutes = calls.map((c) => Number(c.dateTime.slice(11, 13)) * 60 + Number(c.dateTime.slice(14, 16)));
+    minutes.slice(1).forEach((m, i) => expect(m - minutes[i]).toBeLessThanOrEqual(window));
+    expect(calls.every((c) => c.searchWindowMinutes === window)).toBe(true);
+  });
+
+  it('finds a line that only runs at a few times of the day', async () => {
+    // Line 23E has two departures in the morning and two in the afternoon, and no search at a round hour reaches them.
+    const rareDepartures = ['06:31', '07:35', '14:49', '15:49'];
+    const found = await onlyRide(
+      searchedBirkelandsskiftet,
+      mohlenpris,
+      deps(async (params) => {
+        const start = Number(params.dateTime.slice(11, 13)) * 60 + Number(params.dateTime.slice(14, 16));
+        const end = start + (params.searchWindowMinutes ?? 20);
+        const inWindow = rareDepartures.some((t) => {
+          const m = Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+          return m >= start && m < end;
+        });
+        return [trip([ride('50E', busStop, mohlenpris)]), ...(inWindow ? [trip([ride('51E', busStop, mohlenpris)])] : [])];
+      }),
+    );
+    expect(found?.lines).toEqual(['50E', '51E']);
   });
 
   it('answers with the stops Entur uses in trips, not the ones searched for', async () => {
-    const found = await findDirectLeg(
+    const found = await onlyRide(
       searchedBirkelandsskiftet,
       mohlenpris,
       deps(async () => [trip([ride('50E', busStop, mohlenpris)])]),
@@ -75,7 +114,7 @@ describe('findDirectLeg', () => {
       fromPlace: at(searchedBirkelandsskiftet),
       toPlace: at(busStop),
     };
-    const found = await findDirectLeg(
+    const found = await onlyRide(
       searchedBirkelandsskiftet,
       mohlenpris,
       deps(async () => [trip([shortWalk, ride('50E', busStop, mohlenpris)])]),
@@ -83,18 +122,63 @@ describe('findDirectLeg', () => {
     expect(found).toMatchObject({ from: busStop, to: mohlenpris, lines: ['50E'] });
   });
 
+  it('keeps a line that leaves from the neighbouring stop as a ride of its own', async () => {
+    // Line 23 leaves from Frieda Fasmer. Line 23E never calls there, only at Frieda Fasmer rv. 555 a short walk away.
+    const friedaFasmer: StopRef = { id: 'NSR:StopPlace:31914', name: 'Frieda Fasmer' };
+    const friedaFasmerRv: StopRef = { id: 'NSR:StopPlace:31981', name: 'Frieda Fasmer rv. 555' };
+    const sandslivegen: StopRef = { id: 'NSR:StopPlace:30151', name: 'Sandslivegen' };
+    const walk: TripLegResponse = {
+      mode: 'foot',
+      distance: 120,
+      duration: 100,
+      line: null,
+      fromPlace: at(friedaFasmer),
+      toPlace: at(friedaFasmerRv),
+    };
+    const found = await findDirectLegs(
+      friedaFasmer,
+      sandslivegen,
+      deps(async (params) =>
+        params.dateTime.includes('T05:00')
+          ? [trip([ride('23', friedaFasmer, sandslivegen)]), trip([walk, ride('23E', friedaFasmerRv, sandslivegen)])]
+          : [trip([ride('23', friedaFasmer, sandslivegen)]), trip([ride('23', friedaFasmer, sandslivegen)])],
+      ),
+    );
+
+    // The ride from the stop searched for comes first even though the other ride is rarer.
+    expect(found.map((leg) => ({ from: leg.from.id, lines: leg.lines }))).toEqual([
+      { from: friedaFasmer.id, lines: ['23'] },
+      { from: friedaFasmerRv.id, lines: ['23E'] },
+    ]);
+  });
+
+  it('puts the ride from the stop searched for first, then the one with most departures', async () => {
+    const friedaFasmer: StopRef = { id: 'NSR:StopPlace:31914', name: 'Frieda Fasmer' };
+    const friedaFasmerRv: StopRef = { id: 'NSR:StopPlace:31981', name: 'Frieda Fasmer rv. 555' };
+    const found = await findDirectLegs(
+      friedaFasmerRv,
+      mohlenpris,
+      deps(async () => [
+        trip([ride('23', friedaFasmer, mohlenpris)]),
+        trip([ride('23', friedaFasmer, mohlenpris)]),
+        trip([ride('23E', friedaFasmerRv, mohlenpris)]),
+      ]),
+    );
+    expect(found.map((leg) => leg.from.id)).toEqual([friedaFasmerRv.id, friedaFasmer.id]);
+  });
+
   it('ignores suggestions that change vehicle on the way', async () => {
-    const found = await findDirectLeg(
+    const found = await findDirectLegs(
       searchedBirkelandsskiftet,
       mohlenpris,
       deps(async () => [trip([ride('51', busStop, dolvik), ride('50E', dolvik, mohlenpris)])]),
     );
-    expect(found).toBeNull();
+    expect(found).toEqual([]);
   });
 
   it('still answers when some of the searches fail', async () => {
     let n = 0;
-    const found = await findDirectLeg(
+    const found = await onlyRide(
       searchedBirkelandsskiftet,
       mohlenpris,
       deps(async () => {
@@ -106,17 +190,17 @@ describe('findDirectLeg', () => {
   });
 });
 
-describe('findDirectLeg when Entur does not answer', () => {
+describe('findDirectLegs when Entur does not answer', () => {
   it('fails rather than reporting no direct ride when every search fails', async () => {
     await expect(
-      findDirectLeg(searchedBirkelandsskiftet, mohlenpris, deps(async () => Promise.reject(new Error('nettverksfeil')))),
+      findDirectLegs(searchedBirkelandsskiftet, mohlenpris, deps(async () => Promise.reject(new Error('nettverksfeil')))),
     ).rejects.toThrow('nettverksfeil');
   });
 
   it('fails when nothing was found and some searches went unanswered, since those may have found it', async () => {
     let n = 0;
     await expect(
-      findDirectLeg(
+      findDirectLegs(
         searchedBirkelandsskiftet,
         mohlenpris,
         deps(async () => {
@@ -128,7 +212,7 @@ describe('findDirectLeg when Entur does not answer', () => {
   });
 
   it('reports no direct ride only when every search answered', async () => {
-    expect(await findDirectLeg(searchedBirkelandsskiftet, mohlenpris, deps(async () => []))).toBeNull();
+    expect(await findDirectLegs(searchedBirkelandsskiftet, mohlenpris, deps(async () => []))).toEqual([]);
   });
 });
 

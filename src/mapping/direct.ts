@@ -1,4 +1,4 @@
-import { osloIso } from '@/core/oslo-time';
+import { osloIso, timesInWindow } from '@/core/oslo-time';
 import { sortLines, toPattern } from '@/mapping/pattern';
 import type { TripPatternResponse, TripSearchParams } from '@/mapping/query';
 import { walkKey, type Place, type StopRef, type TransitLeg } from '@/model/types';
@@ -11,8 +11,17 @@ export interface DirectDeps {
   date: string;
 }
 
-/** Morning, midday and afternoon, so that lines running only part of the day are found. */
-const SAMPLE_TIMES = ['07:00', '12:00', '16:00'];
+/**
+ * Entur only answers with departures inside the search window, so the search has
+ * to cover the whole service day: a line with two departures a day is otherwise
+ * found only by luck. Each search looks this far ahead, which is wide enough
+ * that the day takes a dozen searches, and narrow enough that the suggestions
+ * (Entur answers with at most 25) do not crowd a rare line out.
+ */
+const SEARCH_WINDOW_MINUTES = 90;
+const FIRST_SEARCH = '05:00';
+const LAST_SEARCH = '23:00';
+const SAMPLE_TIMES = timesInWindow(FIRST_SEARCH, LAST_SEARCH, SEARCH_WINDOW_MINUTES);
 
 export const asPlace = (stop: StopRef): Place => ({ id: stop.id, name: stop.name, stopPlaceId: stop.id });
 
@@ -38,21 +47,35 @@ export function linesBetween(trips: TripPatternResponse[], from: StopRef, to: St
 }
 
 /**
- * The direct ride between two stops, with every line that makes it, or null when
- * Entur answered every search and none has one. Throws when nothing was found and
- * a search went unanswered, since that search may have been the one to find it.
+ * The direct rides between two stops, one per pair of stops that Entur rides
+ * between, each with every line that makes it. Empty when Entur answered every
+ * search and none has a direct ride. Throws when nothing was found and a search
+ * went unanswered, since that search may have been the one to find it.
+ *
  * The stops in the result are the ones Entur uses in trips, which can differ from
- * the ones searched for where a terminal has several stop places.
+ * the ones searched for where a terminal has several stop places. They can also
+ * differ between lines: a line that stops at the neighbouring stop place, a short
+ * walk away, is a ride of its own. Every vehicle is reached through exactly one
+ * stop place, so a line is only usable from the stop its ride starts at, and
+ * folding it into the ride from the other stop would hide the stop it leaves from.
+ * The ride from a stop searched for comes first, then the ones with most departures.
  *
  * The search is an ordinary one, filtered afterwards. Asking Entur for at most
  * zero transfers does not work: it then answers with walking the whole way.
  */
-export async function findDirectLeg(from: StopRef, to: StopRef, deps: DirectDeps): Promise<TransitLeg | null> {
+export async function findDirectLegs(from: StopRef, to: StopRef, deps: DirectDeps): Promise<TransitLeg[]> {
   const origin = asPlace(from);
   const destination = asPlace(to);
 
   const settled = await Promise.allSettled(
-    SAMPLE_TIMES.map((time) => deps.search({ from: origin, to: destination, dateTime: osloIso(deps.date, time) })),
+    SAMPLE_TIMES.map((time) =>
+      deps.search({
+        from: origin,
+        to: destination,
+        dateTime: osloIso(deps.date, time),
+        searchWindowMinutes: SEARCH_WINDOW_MINUTES,
+      }),
+    ),
   );
   const answers = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
   const failure = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
@@ -60,11 +83,13 @@ export async function findDirectLeg(from: StopRef, to: StopRef, deps: DirectDeps
   const rides = directRides(answers.flat(), origin, destination);
   if (rides.size === 0) {
     if (failure) throw failure.reason;
-    return null;
+    return [];
   }
 
-  const [mostCommon] = [...rides.values()].sort((a, b) => b.length - a.length);
-  return { ...mostCommon[0], lines: sortLines(mostCommon.flatMap((leg) => leg.lines)) };
+  const startsAtSearched = (rides: TransitLeg[]) => (rides[0].from.id === from.id ? 0 : 1);
+  return [...rides.values()]
+    .sort((a, b) => startsAtSearched(a) - startsAtSearched(b) || b.length - a.length)
+    .map((group) => ({ ...group[0], lines: sortLines(group.flatMap((leg) => leg.lines)) }));
 }
 
 /** Entur's walking time between two places in seconds, or null when it finds no way on foot. */

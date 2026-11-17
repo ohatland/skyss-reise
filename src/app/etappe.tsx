@@ -8,7 +8,7 @@ import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { nextWeekday } from '@/core/oslo-time';
 import { useTheme } from '@/hooks/use-theme';
 import { log } from '@/logging/logger';
-import { findDirectLeg } from '@/mapping/direct';
+import { findDirectLegs } from '@/mapping/direct';
 import { shortStopName } from '@/mapping/pattern';
 import { searchTrips } from '@/mapping/query';
 import { TRIP_TYPES } from '@/model/places';
@@ -43,10 +43,12 @@ export default function LegScreen() {
   useEffect(() => {
     if (!transit) return;
     let cancelled = false;
-    findDirectLeg(transit.from, transit.to, { search: searchTrips, date: nextWeekday(new Date()) })
+    findDirectLegs(transit.from, transit.to, { search: searchTrips, date: nextWeekday(new Date()) })
       .then((found) => {
         if (cancelled) return;
-        setKnown(found ? found.lines : []);
+        // Only the ride between exactly these stops: a line from the neighbouring stop is not one the leg can use.
+        const here = found.find((ride) => ride.from.id === transit.from.id && ride.to.id === transit.to.id);
+        setKnown(here ? here.lines : []);
         setLookedUp(true);
       })
       .catch(() => {
